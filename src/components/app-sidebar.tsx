@@ -10,6 +10,8 @@ import {
   TrendingUp,
   BarChart3,
   Sparkles,
+  Landmark,
+  Banknote,
 } from "lucide-react";
 
 import {
