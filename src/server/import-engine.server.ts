@@ -469,6 +469,10 @@ export async function extractBankStatementHybridFromImage(opts: {
     errorsCollected.push(
       `OCR retornou texto, mas o parser identificou 0 lançamentos. OCR preview: ${ocrText.slice(0, 500)}`,
     );
+    console.error("[import-engine] parser brasileiro ERROS", {
+      parser_count: 0,
+      ocr_preview: ocrText.slice(0, 500),
+    });
   } else {
     errorsCollected.push("OCR livre retornou texto vazio.");
   }
