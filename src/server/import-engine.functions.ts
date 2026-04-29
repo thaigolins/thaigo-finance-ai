@@ -248,19 +248,7 @@ export const startImport = createServerFn({ method: "POST" })
       },
     });
 
-    const payload = {
-      ok: true as const,
-      sessionId,
-      totalCount: valid.length,
-      duplicateCount: dupes.length,
-      totalCredits,
-      totalDebits,
-      net,
-      bankHint: result.bank_hint ?? null,
-      periodStart: result.period_start ?? null,
-      periodEnd: result.period_end ?? null,
-      errors: allErrors,
-    };
+    const payload = { ok: true as const, sessionId };
     console.log("[startImport] RETURNING", JSON.stringify(payload));
     return payload;
   });
