@@ -502,14 +502,15 @@ function ChatPage() {
               return true;
             }
             const reasonEx = (r && r.error) || "nenhum detalhe retornado";
-            await persistMessage(
-              convId!,
-              "assistant",
-              reasonEx.startsWith("Nenhum lançamento")
-                ? `Nenhum lançamento identificado no extrato.`
-                : `Não foi possível processar o extrato: ${reasonEx}`,
-              [],
-            );
+            // Preserva OCR preview quando vier do servidor para depuração
+            const hasOcr = reasonEx.includes("OCR preview:");
+            const baseMsg = reasonEx.startsWith("Nenhum lançamento")
+              ? `Nenhum lançamento identificado no extrato.`
+              : `Não foi possível processar o extrato: ${reasonEx}`;
+            const ocrTail = hasOcr
+              ? `\n\n<details><summary>OCR bruto (debug)</summary>\n\n\`\`\`\n${reasonEx.split("OCR preview:")[1]?.trim() ?? ""}\n\`\`\`\n</details>`
+              : "";
+            await persistMessage(convId!, "assistant", `${baseMsg}${ocrTail}`, []);
             return false;
           }
           const r = await extractDoc({
