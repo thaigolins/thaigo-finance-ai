@@ -199,8 +199,8 @@ function normalizeDate(dateStr: string, yearHint: number): string | null {
     if (yyyy.length === 2) yyyy = (Number(yyyy) > 50 ? "19" : "20") + yyyy;
     return `${yyyy}-${mm}-${dd}`;
   }
-  // "23 de abr" / "23 abr 2026"
-  m = dateStr.match(/^(\d{1,2})\s+(?:de\s+)?([a-zç]{3,})\.?(?:\s+(?:de\s+)?(\d{2,4}))?$/i);
+  // "23 de abr" / "23 abr 2026" / "24 de abr - 2026" / "24 de abr-2026"
+  m = dateStr.match(/^(\d{1,2})\s+(?:de\s+)?([a-zç]{3,})\.?(?:\s*[-–de\s]+\s*(\d{2,4}))?$/i);
   if (m) {
     const dd = m[1].padStart(2, "0");
     const monKey = m[2].slice(0, 3).toLowerCase().replace("ç", "c");
