@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Download, FileText, Sparkles, Loader2 } from "lucide-react";
+import { Download, FileText, Sparkles, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -20,36 +20,55 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { generatePdf, buildPayload, type PdfKind } from "@/lib/pdf-export";
-
-const PERIODS = [
-  "Abril/2026",
-  "Março/2026",
-  "Fevereiro/2026",
-  "Janeiro/2026",
-  "Últimos 30 dias",
-  "Últimos 90 dias",
-  "Ano de 2026",
-];
+import { generatePdf, type PdfKind } from "@/lib/pdf-export";
+import {
+  PERIOD_OPTIONS,
+  resolvePeriod,
+  buildRealPayload,
+  moduleSlug,
+  type PeriodKey,
+  type ReportModule,
+} from "@/lib/report-builders";
+import { uploadBlob } from "@/lib/storage";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 type Props = {
-  module: string;
+  module: ReportModule | string;
   trigger?: React.ReactNode;
   defaultFilters?: string[];
   filterOptions?: { label: string; values: string[] }[];
 };
 
-export function ExportPdfDialog({ module, trigger, defaultFilters = [], filterOptions }: Props) {
+export function ExportPdfDialog({
+  module,
+  trigger,
+  defaultFilters = [],
+  filterOptions,
+}: Props) {
+  const { user } = useAuth();
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [period, setPeriod] = useState(PERIODS[0]);
+  const [period, setPeriod] = useState<PeriodKey>("current_month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [kind, setKind] = useState<PdfKind>("simples");
   const [filterText, setFilterText] = useState(defaultFilters.join(", "));
   const [extra, setExtra] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<"idle" | "ok" | "err">("idle");
 
   const handleGenerate = async () => {
+    if (!user?.id) {
+      toast.error("Você precisa estar autenticado.");
+      return;
+    }
     setLoading(true);
+    setStatus("idle");
     try {
+      const range = resolvePeriod(period, { from: customFrom, to: customTo });
       const filters = [
         ...filterText
           .split(",")
@@ -59,11 +78,49 @@ export function ExportPdfDialog({ module, trigger, defaultFilters = [], filterOp
           .filter(([, v]) => v && v !== "all")
           .map(([k, v]) => `${k}: ${v}`),
       ];
-      const payload = buildPayload(module, period, filters);
-      // Tiny delay to let UI show loading
-      await new Promise((r) => setTimeout(r, 300));
-      generatePdf(payload, kind);
-      setOpen(false);
+
+      const payload = await buildRealPayload(
+        module as ReportModule,
+        range,
+        filters,
+        user.id,
+      );
+
+      // Generate PDF (also auto-downloads locally)
+      const { blob, filename } = generatePdf(payload, kind, { autoDownload: true });
+
+      // Upload to private bucket
+      const { path } = await uploadBlob({
+        bucket: "reports",
+        userId: user.id,
+        blob,
+        filename,
+        contentType: "application/pdf",
+      });
+
+      // Register in reports table
+      const { error: insErr } = await supabase.from("reports").insert({
+        user_id: user.id,
+        module: moduleSlug(module as ReportModule),
+        title: payload.title,
+        period: range.label,
+        kind: kind === "private" ? "private" : "simples",
+        filters: { items: filters, periodKey: period, from: range.from.toISOString(), to: range.to.toISOString() },
+        pdf_path: path,
+      });
+      if (insErr) throw insErr;
+
+      qc.invalidateQueries({ queryKey: ["reports", user.id] });
+      setStatus("ok");
+      toast.success("PDF gerado, baixado e arquivado.");
+      setTimeout(() => {
+        setOpen(false);
+        setStatus("idle");
+      }, 900);
+    } catch (e) {
+      console.error(e);
+      setStatus("err");
+      toast.error("Falha ao gerar PDF. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -84,7 +141,7 @@ export function ExportPdfDialog({ module, trigger, defaultFilters = [], filterOp
             Exportar {module} em PDF
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Configure período, filtros e o tipo de relatório.
+            Configure período, filtros e o tipo de relatório. O arquivo será baixado e arquivado em sua conta.
           </DialogDescription>
         </DialogHeader>
 
@@ -93,19 +150,42 @@ export function ExportPdfDialog({ module, trigger, defaultFilters = [], filterOp
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">
               Período
             </Label>
-            <Select value={period} onValueChange={setPeriod}>
+            <Select value={period} onValueChange={(v) => setPeriod(v as PeriodKey)}>
               <SelectTrigger className="border-border/60 bg-muted/20">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PERIODS.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {p}
+                {PERIOD_OPTIONS.map((p) => (
+                  <SelectItem key={p.value} value={p.value}>
+                    {p.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {period === "custom" && (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">De</Label>
+                <Input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="border-border/60 bg-muted/20 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Até</Label>
+                <Input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="border-border/60 bg-muted/20 text-sm"
+                />
+              </div>
+            </div>
+          )}
 
           {filterOptions?.map((f) => (
             <div key={f.label} className="space-y-1.5">
@@ -163,7 +243,7 @@ export function ExportPdfDialog({ module, trigger, defaultFilters = [], filterOp
                   <span className="text-sm font-semibold">PDF Simples</span>
                 </div>
                 <p className="text-[11px] leading-snug text-muted-foreground">
-                  Operacional. Direto ao ponto: tabela, totais e data de emissão.
+                  Operacional. Tabela, totais e data de emissão.
                 </p>
               </button>
               <button
@@ -181,11 +261,22 @@ export function ExportPdfDialog({ module, trigger, defaultFilters = [], filterOp
                   <span className="text-sm font-semibold">PDF Private</span>
                 </div>
                 <p className="text-[11px] leading-snug text-muted-foreground">
-                  Executivo. Capa, índice, gráficos, insights e recomendações.
+                  Capa, índice, KPIs, insights e recomendações.
                 </p>
               </button>
             </div>
           </div>
+
+          {status === "ok" && (
+            <div className="flex items-center gap-2 rounded-lg border border-primary/40 bg-emerald-soft px-3 py-2 text-xs text-primary">
+              <CheckCircle2 className="h-4 w-4" /> PDF gerado e arquivado com sucesso.
+            </div>
+          )}
+          {status === "err" && (
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <AlertCircle className="h-4 w-4" /> Falha ao gerar. Verifique sua conexão.
+            </div>
+          )}
         </div>
 
         <DialogFooter>
