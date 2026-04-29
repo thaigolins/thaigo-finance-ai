@@ -451,14 +451,13 @@ function ChatPage() {
               });
               return true;
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const reasonEx =
               (r && (r.error || r.message)) ||
-              `DEBUG v3: startImport retornou ${r === undefined ? "undefined" : r === null ? "null" : JSON.stringify(r).slice(0, 300)}`;
+              "Não foi possível extrair os lançamentos.";
             await persistMessage(
               convId!,
               "assistant",
-              `DEBUG v3 · Não consegui extrair os dados de **${att.filename}**. Motivo real: ${reasonEx}`,
+              `Não consegui extrair os dados de **${att.filename}**. Motivo: ${reasonEx}`,
               [],
             );
             return false;
