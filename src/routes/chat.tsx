@@ -404,7 +404,7 @@ function ChatPage() {
               );
               return false;
             }
-            let r: { ok: boolean; sessionId?: string; error?: string } | null = null;
+            let r: { ok: boolean; sessionId?: string; error?: string; debugText?: string } | null = null;
             try {
               const { data: sessData } = await supabase.auth.getSession();
               const token = sessData.session?.access_token;
@@ -490,7 +490,7 @@ function ChatPage() {
                 await persistMessage(
                   convId!,
                   "assistant",
-                  `Nenhum lançamento identificado no extrato.`,
+                  `Não foi possível renderizar o card de importação: a API retornou ok:true, mas a sessão ${r.sessionId} veio com total_count=${summary.totalCount}.`,
                   [],
                 );
                 return false;
@@ -502,15 +502,12 @@ function ChatPage() {
               return true;
             }
             const reasonEx = (r && r.error) || "nenhum detalhe retornado";
-            // Preserva OCR preview quando vier do servidor para depuração
-            const hasOcr = reasonEx.includes("OCR preview:");
-            const baseMsg = reasonEx.startsWith("Nenhum lançamento")
-              ? `Nenhum lançamento identificado no extrato.`
-              : `Não foi possível processar o extrato: ${reasonEx}`;
-            const ocrTail = hasOcr
-              ? `\n\n<details><summary>OCR bruto (debug)</summary>\n\n\`\`\`\n${reasonEx.split("OCR preview:")[1]?.trim() ?? ""}\n\`\`\`\n</details>`
-              : "";
-            await persistMessage(convId!, "assistant", `${baseMsg}${ocrTail}`, []);
+            const debugText = r?.debugText?.trim();
+            const safeDebugText = debugText?.replace(/```/g, "``\u200b`");
+            const msg = debugText
+              ? `Nenhum lançamento identificado no extrato.\n\n${reasonEx}\n\nTexto lido pela IA/OCR:\n\n\`\`\`text\n${safeDebugText}\n\`\`\``
+              : reasonEx;
+            await persistMessage(convId!, "assistant", msg, []);
             return false;
           }
           const r = await extractDoc({
