@@ -41,11 +41,12 @@ Regras CRÍTICAS:
 - NÃO inclua linhas de saldo do dia, totalizadores ou cabeçalhos como lançamentos.
 - Linhas de "Saldo do dia", "Saldo anterior", "Total de créditos/débitos" são IGNORADAS.
 - Inclua opening_balance e closing_balance quando visíveis.
-- Para apps mobile: cada transação tem título (ex: "Pix Enviado"), subtítulo (nome), valor e sinal. Extraia todos.`;
+- Para apps mobile: cada transação tem título (ex: "Pix Enviado"), subtítulo (nome), valor e sinal. Extraia todos.
+- bank_hint: nome do banco identificado na tela (ex: 'Safra', 'Nubank', 'Inter', 'Itaú'). Procure no logo, cabeçalho ou nome do app. OBRIGATÓRIO.`;
 
 const USER_EXTRATO = `Extraia o JSON com este formato EXATO:
 {
-  "bank_hint": "string|null",
+  "bank_hint": "Nome do banco (ex: Safra, Nubank, Inter) — obrigatório",
   "account_hint": "string|null",
   "period_start": "YYYY-MM-DD|null",
   "period_end": "YYYY-MM-DD|null",
