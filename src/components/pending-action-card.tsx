@@ -350,9 +350,6 @@ export function PendingActionCard({
               <div className="font-medium">Campos obrigatórios em falta:</div>
               <div className="mt-0.5">{missingRequired.join(", ")}</div>
             </div>
-              )}
-            </div>
-          )}
 
 
           {!done && (
