@@ -485,6 +485,16 @@ function ChatPage() {
               } catch (e) {
                 console.error("[chat] listSession failed", e);
               }
+              // Guarda defensiva: se total_count = 0, NÃO renderizar card
+              if (summary.totalCount <= 0) {
+                await persistMessage(
+                  convId!,
+                  "assistant",
+                  `Nenhum lançamento identificado no extrato.`,
+                  [],
+                );
+                return false;
+              }
               const intro = `Li seu **extrato** (\`${att.filename}\`) e identifiquei **${summary.totalCount} lançamento(s)**${summary.duplicateCount > 0 ? ` · ${summary.duplicateCount} possível(eis) duplicata(s)` : ""}. Revise antes de gravar.`;
               await persistMessage(convId!, "assistant", intro, [], {
                 importSession: summary,
@@ -495,7 +505,9 @@ function ChatPage() {
             await persistMessage(
               convId!,
               "assistant",
-              `Não foi possível processar o extrato: ${reasonEx}`,
+              reasonEx.startsWith("Nenhum lançamento")
+                ? `Nenhum lançamento identificado no extrato.`
+                : `Não foi possível processar o extrato: ${reasonEx}`,
               [],
             );
             return false;
