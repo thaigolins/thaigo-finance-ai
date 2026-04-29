@@ -217,6 +217,10 @@ function isLikelyHeaderOrBalance(line: string): boolean {
   return /\b(saldo\s+(do\s+dia|anterior|atual|final|inicial|dispon[ií]vel)|total\s+(de\s+)?(cr[eé]ditos|d[eé]bitos)|extrato|p[aá]gina|lan[çc]amentos|recentes|futuros|filtrar)\b/i.test(line);
 }
 
+function isLikelyTransactionTitle(line: string): boolean {
+  return /\b(pix|ted|doc|boleto|proventos?|ordem\s+de\s+cr[eé]dito|cr[eé]dito|d[eé]bito|tarifa|saque|dep[oó]sito|transfer[eê]ncia)\b/i.test(line);
+}
+
 const AMOUNT_RE_GLOBAL = /([-−–—]?\s*R?\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}|[-−–—]?\d+,\d{2})/g;
 const DATE_INLINE_RE = /\b(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{1,2}\s+(?:de\s+)?[a-zç]{3,}\.?(?:\s*[-–]\s*\d{2,4}|\s+(?:de\s+)?\d{2,4})?)\b/i;
 
