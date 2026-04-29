@@ -424,11 +424,11 @@ function ChatPage() {
               return true;
             }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const reasonEx = (r as any)?.error || "Falha ao processar extrato";
+            const reasonEx = (r as any)?.error || (r as any)?.message || "DEBUG v2: startImport retornou sem error/message";
             await persistMessage(
               convId!,
               "assistant",
-              `Não consegui extrair os dados de **${att.filename}**. Motivo: ${reasonEx}`,
+              `DEBUG v2 · Não consegui extrair os dados de **${att.filename}**. Motivo real: ${reasonEx}`,
               [],
             );
             return false;
@@ -474,11 +474,11 @@ function ChatPage() {
         } catch (err) {
           console.error("extract error", err);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const reason = (err as any)?.message || "Falha ao processar documento";
+          const reason = (err as any)?.message || String(err) || "DEBUG v2: erro sem message no catch";
           await persistMessage(
             convId!,
             "assistant",
-            `Falha ao processar **${att.filename}** com IA. Motivo: ${reason}`,
+            `DEBUG v2 · Falha ao processar **${att.filename}** com IA. Motivo real: ${reason}`,
             [],
           );
           return false;
