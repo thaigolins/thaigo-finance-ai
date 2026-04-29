@@ -285,6 +285,7 @@ function ChatPage() {
 
       // Upload anexos
       const attachments: AttachmentMeta[] = [];
+      const uploadedIds: (string | null)[] = [];
       const kindToEnum: Record<string, "invoice_pdf" | "bank_statement" | "payslip" | "fgts_statement" | "loan_contract" | "image" | "other"> = {
         fatura: "invoice_pdf",
         extrato: "bank_statement",
@@ -297,15 +298,20 @@ function ChatPage() {
         const { bucket, kind } = classifyAttachment(file);
         const up = await uploadFile({ bucket, userId: user.id, file, prefix: "chat" });
         attachments.push({ filename: up.filename, bucket, path: up.path, mime: up.mime, size: up.size, kind });
-        await supabase.from("uploaded_files").insert({
-          user_id: user.id,
-          bucket,
-          path: up.path,
-          filename: up.filename,
-          mime_type: up.mime,
-          size_bytes: up.size,
-          kind: kindToEnum[kind] ?? "other",
-        });
+        const ufRes = await supabase
+          .from("uploaded_files")
+          .insert({
+            user_id: user.id,
+            bucket,
+            path: up.path,
+            filename: up.filename,
+            mime_type: up.mime,
+            size_bytes: up.size,
+            kind: kindToEnum[kind] ?? "other",
+          })
+          .select("id")
+          .single();
+        uploadedIds.push((ufRes.data as { id: string } | null)?.id ?? null);
       }
 
       // Persiste mensagem do usuário
@@ -316,9 +322,79 @@ function ChatPage() {
       invalidateMessages();
       invalidateConvs();
 
+      // ===== Extração automática de documentos suportados =====
+      // Mapeia kind do anexo -> kind do extrator
+      const extractorKind: Record<string, "fatura" | "extrato" | "fgts" | "emprestimo" | "contracheque"> = {
+        fatura: "fatura",
+        extrato: "extrato",
+        fgts: "fgts",
+        contrato: "emprestimo",
+        contracheque: "contracheque",
+      };
+      const extractableBuckets = new Set<StorageBucket>([
+        "invoices",
+        "bank-statements",
+        "payslips",
+        "fgts-statements",
+        "loan-contracts",
+      ]);
+      let anyExtracted = false;
+      for (let i = 0; i < attachments.length; i++) {
+        const a = attachments[i];
+        const ek = extractorKind[a.kind];
+        if (!ek) continue;
+        if (!extractableBuckets.has(a.bucket as StorageBucket)) continue;
+        try {
+          const r = await extractDoc({
+            data: {
+              bucket: a.bucket as
+                | "invoices"
+                | "bank-statements"
+                | "payslips"
+                | "fgts-statements"
+                | "loan-contracts"
+                | "images",
+              path: a.path,
+              filename: a.filename,
+              mime: a.mime || "application/pdf",
+              kind: ek,
+              uploadedFileId: uploadedIds[i] ?? undefined,
+              conversationId: convId,
+            },
+          });
+          if (r.ok) {
+            anyExtracted = true;
+            const intro = `Li seu documento **${a.filename}** e extraí os dados. Revise a prévia abaixo e confirme para gravar no app.`;
+            await persistMessage(convId, "assistant", intro, [], {
+              pendingAction: {
+                pendingId: r.pendingId,
+                kind: r.kind,
+                summary: r.summary,
+                payload: r.payload,
+              },
+            });
+          } else {
+            await persistMessage(
+              convId,
+              "assistant",
+              `Não consegui extrair os dados de **${a.filename}** automaticamente. Motivo: ${r.error}\n\nVocê ainda pode lançar manualmente no módulo correspondente.`,
+              [],
+            );
+          }
+        } catch (err) {
+          console.error("extract error", err);
+          await persistMessage(
+            convId,
+            "assistant",
+            `Falha ao processar **${a.filename}** com IA. Tente novamente ou lance manualmente.`,
+            [],
+          );
+        }
+      }
+
       // Detecta exportação de PDF (caminho rápido determinístico)
       const exportReq = detectExport(text);
-      let replyContent: string;
+      let replyContent: string | null = null;
       if (exportReq) {
         const payload = buildPayload(exportReq.module, exportReq.period, exportReq.filters);
         setTimeout(() => generatePdf(payload, exportReq.kind), 250);
@@ -327,10 +403,9 @@ function ChatPage() {
             ? "Private (executivo, com capa, índice e insights)"
             : "Simples (operacional, direto ao ponto)";
         replyContent = `Perfeito. Estou gerando seu **PDF ${exportReq.kind === "private" ? "Private" : "Simples"}** do módulo **${exportReq.module}** para **${exportReq.period}**${exportReq.filters.length ? ` com filtros: ${exportReq.filters.join(", ")}` : ""}.\n\nFormato: ${tipo}.\n\nO download começará em instantes.`;
-      } else {
-        // Chama IA real via server function (usa Lovable AI Gateway no backend)
+      } else if (text || !anyExtracted) {
+        // Só chama a IA conversacional se houve texto OU se não houve extração
         try {
-          // Histórico: últimas 20 mensagens já existentes (antes desta nova) para contexto
           const history = messages
             .slice(-20)
             .filter((m) => m.role === "user" || m.role === "assistant")
@@ -355,7 +430,9 @@ function ChatPage() {
         }
       }
 
-      await persistMessage(convId, "assistant", replyContent, []);
+      if (replyContent) {
+        await persistMessage(convId, "assistant", replyContent, []);
+      }
       invalidateMessages();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao enviar");
