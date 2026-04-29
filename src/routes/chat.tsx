@@ -600,12 +600,12 @@ function ChatPage() {
         const a = attachments[i];
         const knownKind = extractorKindByAttKind[a.kind];
         if (knownKind) {
-          const ok = await runExtraction(a, knownKind, uploadedIds[i]);
+          const ok = await runExtraction(a, knownKind, uploadedIds[i], mentionedAccountId);
           if (ok) anyExtracted = true;
         } else if (a.kind === "imagem" && userWantsExtract) {
           const ek = detectExtractorKind(text, a.kind);
           if (ek) {
-            const ok = await runExtraction(a, ek, uploadedIds[i]);
+            const ok = await runExtraction(a, ek, uploadedIds[i], mentionedAccountId);
             if (ok) anyExtracted = true;
           } else {
             await persistMessage(
@@ -633,7 +633,7 @@ function ChatPage() {
         if (lastAtt) {
           const ek = detectExtractorKind(text, lastAtt.kind);
           if (ek) {
-            const ok = await runExtraction(lastAtt, ek);
+            const ok = await runExtraction(lastAtt, ek, null, mentionedAccountId);
             if (ok) anyExtracted = true;
           } else {
             await persistMessage(
