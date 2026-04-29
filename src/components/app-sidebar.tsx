@@ -68,15 +68,15 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-      <SidebarHeader className="border-b border-sidebar-border py-4">
-        <Link to="/" className="flex items-center gap-2.5 px-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-            <Sparkles className="h-4.5 w-4.5 text-primary-foreground" strokeWidth={2.5} />
+      <SidebarHeader className="border-b border-sidebar-border/60 py-5">
+        <Link to="/" className="flex items-center gap-3 px-2">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-emerald-soft">
+            <Sparkles className="h-4 w-4 text-primary" strokeWidth={2} />
           </div>
           {!collapsed && (
             <div className="flex flex-col leading-tight">
-              <span className="text-sm font-semibold tracking-tight">Thaigo Finance</span>
-              <span className="text-[10px] uppercase tracking-widest text-primary">AI Private</span>
+              <span className="text-[13px] font-semibold tracking-tight">Thaigo Finance</span>
+              <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Private · AI</span>
             </div>
           )}
         </Link>
@@ -118,19 +118,19 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-3">
+      <SidebarFooter className="border-t border-sidebar-border/60 p-3">
         {!collapsed ? (
-          <div className="flex items-center gap-3 rounded-xl bg-sidebar-accent/50 p-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-primary text-sm font-semibold text-primary-foreground">
+          <div className="flex items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/30 p-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-primary/30 bg-emerald-soft text-sm font-semibold text-primary">
               T
             </div>
             <div className="flex flex-col leading-tight">
-              <span className="text-sm font-medium">Thaigo</span>
-              <span className="text-xs text-muted-foreground">Private Client</span>
+              <span className="text-[13px] font-medium">Thaigo Silva</span>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Private Client</span>
             </div>
           </div>
         ) : (
-          <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-gradient-primary text-sm font-semibold text-primary-foreground">
+          <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full border border-primary/30 bg-emerald-soft text-sm font-semibold text-primary">
             T
           </div>
         )}

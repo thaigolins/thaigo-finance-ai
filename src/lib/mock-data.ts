@@ -6,9 +6,9 @@ export const accounts = [
 ];
 
 export const cards = [
-  { id: "1", name: "Nubank Ultravioleta", brand: "Mastercard", limit: 25000, used: 8430.22, dueDay: 10, closingDay: 3, color: "from-zinc-800 to-zinc-950" },
-  { id: "2", name: "Itaú Personnalité Black", brand: "Visa Infinite", limit: 40000, used: 15200.5, dueDay: 15, closingDay: 8, color: "from-orange-900 to-zinc-900" },
-  { id: "3", name: "BTG Black", brand: "Mastercard Black", limit: 60000, used: 4220.0, dueDay: 20, closingDay: 13, color: "from-emerald-900 to-zinc-950" },
+  { id: "1", name: "Nubank Ultravioleta", brand: "Mastercard Black", limit: 25000, used: 8430.22, dueDay: 10, closingDay: 3, variant: "graphite" as const },
+  { id: "2", name: "Itaú Personnalité Black", brand: "Visa Infinite", limit: 40000, used: 15200.5, dueDay: 15, closingDay: 8, variant: "obsidian" as const },
+  { id: "3", name: "BTG Black", brand: "Mastercard Black", limit: 60000, used: 4220.0, dueDay: 20, closingDay: 13, variant: "emerald" as const },
 ];
 
 export const transactions = [

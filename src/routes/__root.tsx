@@ -38,9 +38,17 @@ export const Route = createRootRoute({
         content:
           "Dashboard financeiro premium com IA. Gestão de contas, cartões, faturas, metas e investimentos.",
       },
-      { name: "theme-color", content: "#0a1410" },
+      { name: "theme-color", content: "#0d1413" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
+      },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
