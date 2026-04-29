@@ -418,7 +418,7 @@ function ChatPage() {
                   bucket: att.bucket as "invoices" | "bank-statements" | "payslips" | "fgts-statements" | "loan-contracts" | "images",
                   path: att.path,
                   filename: att.filename,
-                  mime: att.mime || (att.bucket === "images" ? "image/jpeg" : "application/pdf"),
+                  mime: att.mime || (att.filename.match(/\.png$/i) ? "image/png" : "image/jpeg"),
                   kind: "extrato",
                   token: token,
                   uploadedFileId: uploadedFileId ?? undefined,
