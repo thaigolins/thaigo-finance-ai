@@ -451,6 +451,7 @@ function ChatPage() {
                   token: token,
                   uploadedFileId: uploadedFileId ?? undefined,
                   conversationId: convId!,
+                  bankAccountId: bankAccountId ?? undefined,
                 },
               });
               console.log("[chat] startImport response", r);
