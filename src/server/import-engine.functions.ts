@@ -115,7 +115,7 @@ export const startImport = createServerFn({ method: "POST" })
       console.error("[startImport] step=storage_download FAILED", dl.error);
       await supabase.from("import_sessions").update({ status: "failed", errors: [msg] }).eq("id", sessionId);
       await logAudit(supabase, { userId, action: "extract", docKind: data.kind, status: "error", message: msg });
-      return { ok: false as const, error: msg, sessionId };
+      return { ok: false as const, error: msg };
     }
     const ab = await dl.data.arrayBuffer();
     const bytes = new Uint8Array(ab);
@@ -133,7 +133,7 @@ export const startImport = createServerFn({ method: "POST" })
       const msg = `Erro no extractor: ${e instanceof Error ? e.message : String(e)}`;
       console.error("[startImport] step=extractor THREW", e);
       await supabase.from("import_sessions").update({ status: "failed", errors: [msg] }).eq("id", sessionId);
-      return { ok: false as const, error: msg, sessionId };
+      return { ok: false as const, error: msg };
     }
     console.log("[startImport] step=extraction_done", {
       method: result.method,
@@ -154,7 +154,7 @@ export const startImport = createServerFn({ method: "POST" })
         .update({ status: "failed", errors: allErrors.length > 0 ? allErrors : [detail] })
         .eq("id", sessionId);
       console.error("[startImport] step=no_transactions", { detail });
-      return { ok: false as const, error: `Não foi possível extrair lançamentos: ${detail}`, sessionId };
+      return { ok: false as const, error: `Não foi possível extrair lançamentos: ${detail}` };
     }
 
     // 5) Anti-duplicidade
@@ -202,7 +202,7 @@ export const startImport = createServerFn({ method: "POST" })
           .from("import_sessions")
           .update({ status: "failed", errors: [ins.error.message] })
           .eq("id", sessionId);
-        return { ok: false as const, error: `Falha ao gravar staging: ${ins.error.message}`, sessionId };
+        return { ok: false as const, error: `Falha ao gravar staging: ${ins.error.message}` };
       }
       console.log("[startImport] step=staging_inserted", { count: rows.length });
     }
@@ -248,19 +248,7 @@ export const startImport = createServerFn({ method: "POST" })
       },
     });
 
-    const payload = {
-      ok: true as const,
-      sessionId,
-      totalCount: valid.length,
-      duplicateCount: dupes.length,
-      totalCredits,
-      totalDebits,
-      net,
-      bankHint: result.bank_hint ?? null,
-      periodStart: result.period_start ?? null,
-      periodEnd: result.period_end ?? null,
-      errors: allErrors,
-    };
+    const payload = { ok: true as const, sessionId };
     console.log("[startImport] RETURNING", JSON.stringify(payload));
     return payload;
   });
