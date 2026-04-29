@@ -87,7 +87,7 @@ export const startImport = createServerFn({ method: "POST" })
 
     const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError || !userData?.user) {
-      throw new Error("Unauthorized: sessão inválida");
+      return { ok: false as const, error: "Sessão inválida. Faça login novamente." };
     }
     const userId = userData.user.id as string;
     console.log("[startImport] VERSION_IMPORT_ENGINE_29APR step=begin", {
