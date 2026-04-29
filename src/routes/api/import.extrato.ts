@@ -9,6 +9,31 @@ import {
   type RawTx,
 } from "@/server/import-engine.server";
 
+function buildDebugText(rawInput: unknown): string {
+  const raw = (rawInput && typeof rawInput === "object" ? rawInput : {}) as Record<string, unknown>;
+  const ocrText = typeof raw.ocr_text === "string" ? raw.ocr_text : "";
+  const ocrFallbackRaw = typeof raw.ocr_fallback_raw === "string" ? raw.ocr_fallback_raw : "";
+  const aiRaw = raw.ai_raw ?? raw.vision_raw ?? raw.vision_json ?? null;
+  const stringify = (value: unknown) => {
+    if (typeof value === "string") return value;
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  };
+  return [
+    "[OCR bruto]",
+    ocrText || "(vazio)",
+    "",
+    "[Raw response IA estruturada]",
+    aiRaw ? stringify(aiRaw) : "(vazio)",
+    "",
+    "[Raw response OCR fallback]",
+    ocrFallbackRaw || "(vazio)",
+  ].join("\n");
+}
+
 const Bucket = z.enum([
   "invoices",
   "bank-statements",
@@ -123,26 +148,23 @@ export const Route = createFileRoute("/api/import/extrato")({
         const allErrors = [...result.errors, ...vErrors];
 
         if (valid.length === 0) {
-          const raw = (result.raw && typeof result.raw === "object" ? result.raw : {}) as Record<string, unknown>;
-          const ocrText = typeof raw.ocr_text === "string" ? raw.ocr_text : "";
-          const ocrPreview = ocrText.slice(0, 500);
+          const debugText = buildDebugText(result.raw);
           const detail = allErrors.length > 0 ? allErrors.join(" | ") : "IA e OCR não retornaram lançamentos.";
-          const userError = ocrPreview
-            ? `Nenhum lançamento identificado no extrato. OCR preview: ${ocrPreview}`
-            : "Nenhum lançamento identificado no extrato.";
+          const userError = `Nenhum lançamento identificado no extrato. Detalhes: ${detail}`;
           console.error("[/api/import/extrato] NENHUM LANÇAMENTO", { sessionId, allErrors, raw: result.raw });
           await supabase
             .from("import_sessions")
             .update({
               status: "failed",
-              errors: ocrPreview
-                ? [...(allErrors.length > 0 ? allErrors : [detail]), `OCR preview: ${ocrPreview}`]
-                : (allErrors.length > 0 ? allErrors : [detail]),
+              errors: [...(allErrors.length > 0 ? allErrors : [detail]), `DEBUG_TEXT:\n${debugText}`],
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              raw_extraction: (result.raw ?? null) as any,
+              raw_extraction: ({
+                ...(result.raw && typeof result.raw === "object" ? result.raw as Record<string, unknown> : {}),
+                debug_text: debugText,
+              }) as any,
             })
             .eq("id", sessionId);
-          return json({ ok: false, error: userError }, 200);
+          return json({ ok: false, error: userError, debugText }, 200);
         }
 
         const dupes = await detectDuplicates({
