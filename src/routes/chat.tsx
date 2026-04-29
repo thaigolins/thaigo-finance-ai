@@ -409,6 +409,7 @@ function ChatPage() {
         att: AttachmentMeta,
         ek: "fatura" | "extrato" | "fgts" | "emprestimo" | "contracheque",
         uploadedFileId?: string | null,
+        bankAccountId?: string | null,
       ): Promise<boolean> => {
         if (!extractableBuckets.has(att.bucket as StorageBucket)) {
           await persistMessage(
