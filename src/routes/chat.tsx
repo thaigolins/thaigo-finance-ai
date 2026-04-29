@@ -581,6 +581,19 @@ function ChatPage() {
       let anyExtracted = false;
       const userWantsExtract = isExtractIntent(text);
 
+      // Detecta menção a uma conta bancária no texto para vínculo automático
+      let mentionedAccountId: string | null = null;
+      try {
+        const { data: accs } = await supabase
+          .from("bank_accounts")
+          .select("id, bank")
+          .eq("user_id", user.id);
+        const accounts = (accs ?? []).map((a) => ({ id: a.id as string, bank: (a.bank as string) ?? "" }));
+        mentionedAccountId = detectBankInText(text, accounts);
+      } catch (e) {
+        console.warn("[chat] detectBankInText fail", e);
+      }
+
       // 1) Anexos novos: extrai automaticamente quando o tipo já é conhecido
       //    Imagens só são extraídas se o usuário pedir explicitamente neste turno.
       for (let i = 0; i < attachments.length; i++) {
