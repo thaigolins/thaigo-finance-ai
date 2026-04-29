@@ -6,7 +6,8 @@ export type StorageBucket =
   | "payslips"
   | "fgts-statements"
   | "loan-contracts"
-  | "images";
+  | "images"
+  | "reports";
 
 /**
  * Faz upload de um arquivo para um bucket privado.
