@@ -703,6 +703,54 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_ai_actions: {
+        Row: {
+          confirmed_at: string | null
+          conversation_id: string | null
+          created_at: string
+          discarded_at: string | null
+          id: string
+          kind: Database["public"]["Enums"]["pending_action_kind"]
+          message_id: string | null
+          payload: Json
+          source_file_id: string | null
+          status: Database["public"]["Enums"]["pending_action_status"]
+          summary: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          confirmed_at?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          discarded_at?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["pending_action_kind"]
+          message_id?: string | null
+          payload?: Json
+          source_file_id?: string | null
+          status?: Database["public"]["Enums"]["pending_action_status"]
+          summary?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          confirmed_at?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          discarded_at?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["pending_action_kind"]
+          message_id?: string | null
+          payload?: Json
+          source_file_id?: string | null
+          status?: Database["public"]["Enums"]["pending_action_status"]
+          summary?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -973,6 +1021,13 @@ export type Database = {
         | "previdencia"
         | "outros"
       invoice_status: "open" | "closed" | "paid" | "overdue"
+      pending_action_kind:
+        | "fatura"
+        | "extrato"
+        | "fgts"
+        | "emprestimo"
+        | "contracheque"
+      pending_action_status: "pending" | "confirmed" | "discarded"
       recurring_status: "active" | "paused" | "cancelled"
       report_kind: "simples" | "private"
       tx_kind: "income" | "expense" | "transfer" | "investment"
@@ -1141,6 +1196,14 @@ export const Constants = {
         "outros",
       ],
       invoice_status: ["open", "closed", "paid", "overdue"],
+      pending_action_kind: [
+        "fatura",
+        "extrato",
+        "fgts",
+        "emprestimo",
+        "contracheque",
+      ],
+      pending_action_status: ["pending", "confirmed", "discarded"],
       recurring_status: ["active", "paused", "cancelled"],
       report_kind: ["simples", "private"],
       tx_kind: ["income", "expense", "transfer", "investment"],
