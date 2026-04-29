@@ -212,7 +212,34 @@ function detectExtractorKind(
   return null;
 }
 
-
+function detectBankInText(text: string, accounts: { id: string; bank: string }[]): string | null {
+  const t = text.toLowerCase();
+  for (const acc of accounts) {
+    if (acc.bank && t.includes(acc.bank.toLowerCase())) return acc.id;
+  }
+  // Nomes/aliases comuns
+  const bankNames: Record<string, string[]> = {
+    safra: ["safra"],
+    nubank: ["nubank", "nu "],
+    "itaú": ["itaú", "itau"],
+    bradesco: ["bradesco"],
+    inter: ["inter"],
+    bb: ["banco do brasil", " bb "],
+    caixa: ["caixa"],
+    santander: ["santander"],
+    c6: ["c6"],
+    btg: ["btg"],
+  };
+  for (const acc of accounts) {
+    const bankKey = (acc.bank ?? "").toLowerCase();
+    for (const [, aliases] of Object.entries(bankNames)) {
+      if (aliases.some((a) => bankKey.includes(a)) && aliases.some((a2) => t.includes(a2))) {
+        return acc.id;
+      }
+    }
+  }
+  return null;
+}
 
 function ChatPage() {
   const { user } = useAuth();
@@ -382,6 +409,7 @@ function ChatPage() {
         att: AttachmentMeta,
         ek: "fatura" | "extrato" | "fgts" | "emprestimo" | "contracheque",
         uploadedFileId?: string | null,
+        bankAccountId?: string | null,
       ): Promise<boolean> => {
         if (!extractableBuckets.has(att.bucket as StorageBucket)) {
           await persistMessage(
@@ -423,6 +451,7 @@ function ChatPage() {
                   token: token,
                   uploadedFileId: uploadedFileId ?? undefined,
                   conversationId: convId!,
+                  bankAccountId: bankAccountId ?? undefined,
                 },
               });
               console.log("[chat] startImport response", r);
@@ -552,18 +581,31 @@ function ChatPage() {
       let anyExtracted = false;
       const userWantsExtract = isExtractIntent(text);
 
+      // Detecta menção a uma conta bancária no texto para vínculo automático
+      let mentionedAccountId: string | null = null;
+      try {
+        const { data: accs } = await supabase
+          .from("bank_accounts")
+          .select("id, bank")
+          .eq("user_id", user.id);
+        const accounts = (accs ?? []).map((a) => ({ id: a.id as string, bank: (a.bank as string) ?? "" }));
+        mentionedAccountId = detectBankInText(text, accounts);
+      } catch (e) {
+        console.warn("[chat] detectBankInText fail", e);
+      }
+
       // 1) Anexos novos: extrai automaticamente quando o tipo já é conhecido
       //    Imagens só são extraídas se o usuário pedir explicitamente neste turno.
       for (let i = 0; i < attachments.length; i++) {
         const a = attachments[i];
         const knownKind = extractorKindByAttKind[a.kind];
         if (knownKind) {
-          const ok = await runExtraction(a, knownKind, uploadedIds[i]);
+          const ok = await runExtraction(a, knownKind, uploadedIds[i], mentionedAccountId);
           if (ok) anyExtracted = true;
         } else if (a.kind === "imagem" && userWantsExtract) {
           const ek = detectExtractorKind(text, a.kind);
           if (ek) {
-            const ok = await runExtraction(a, ek, uploadedIds[i]);
+            const ok = await runExtraction(a, ek, uploadedIds[i], mentionedAccountId);
             if (ok) anyExtracted = true;
           } else {
             await persistMessage(
@@ -591,7 +633,7 @@ function ChatPage() {
         if (lastAtt) {
           const ek = detectExtractorKind(text, lastAtt.kind);
           if (ek) {
-            const ok = await runExtraction(lastAtt, ek);
+            const ok = await runExtraction(lastAtt, ek, null, mentionedAccountId);
             if (ok) anyExtracted = true;
           } else {
             await persistMessage(
