@@ -203,6 +203,13 @@ function AuthPage() {
               Apple
             </Button>
           </div>
+
+          {typeof window !== "undefined" && window.location.hostname.includes("id-preview--") ? (
+            <p className="mt-3 text-center text-[10px] leading-relaxed text-muted-foreground/80">
+              No ambiente de preview, o login social pode falhar por restrições de redirect.
+              Use e-mail e senha — funciona normalmente no site publicado.
+            </p>
+          ) : null}
         </div>
       </div>
     </div>
