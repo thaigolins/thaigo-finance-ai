@@ -494,6 +494,12 @@ function ReviewPage() {
                                 t.kind === "income" ? "text-success" : "text-destructive",
                               )}
                             />
+                            <p className={cn(
+                              "mt-0.5 text-[10px] font-medium",
+                              t.kind === "income" ? "text-success" : "text-destructive",
+                            )}>
+                              {t.kind === "income" ? "+" : "-"}R$ {Number(t.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
                           </TableCell>
                           <TableCell>
                             {t.status === "confirmed" ? (
