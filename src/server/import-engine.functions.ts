@@ -40,6 +40,7 @@ const StartInput = z.object({
   conversationId: z.string().uuid().optional(),
   messageId: z.string().uuid().optional(),
   bankAccountId: z.string().uuid().nullish(),
+  token: z.string().min(1),
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
