@@ -251,6 +251,11 @@ function parseExtratoFromText(text: string): RawTx[] {
   };
 
   for (const line of lines) {
+    // 0) Linhas de saldo/cabeçalho — ignorar SEMPRE (mesmo com valor)
+    if (isLikelyHeaderOrBalance(line)) {
+      continue;
+    }
+
     // 1) tenta inline: "10/04 PIX RECEBIDO JOAO 1.234,56 C"
     const inlineDate = line.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+(.+)$/);
     const amounts = line.match(AMOUNT_RE_GLOBAL);
