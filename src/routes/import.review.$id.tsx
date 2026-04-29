@@ -96,7 +96,7 @@ function ReviewPage() {
   const navigate = useNavigate();
   const list = useServerFn(listSession);
   const update = useServerFn(updateStagingTx);
-  const confirm = useServerFn(confirmStaging);
+  const confirmFn = useServerFn(confirmStaging);
   const discard = useServerFn(discardSession);
 
   const [loading, setLoading] = useState(true);
@@ -198,7 +198,7 @@ function ReviewPage() {
     }
     setSubmitting(true);
     try {
-      const r = await confirm({
+      const r = await confirmFn({
         data: {
           sessionId: id,
           ids,
@@ -218,7 +218,6 @@ function ReviewPage() {
   };
 
   const onDiscard = async () => {
-    if (!confirm) return;
     if (!window.confirm("Descartar toda esta importação? Os lançamentos não confirmados serão removidos.")) return;
     const r = await discard({ data: { sessionId: id } });
     if (!r.ok) {
