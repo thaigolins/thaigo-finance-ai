@@ -83,3 +83,27 @@ export const invoices = [
   { id: "4", card: "Nubank Ultravioleta", month: "Março/2026", amount: 7120.8, status: "paid", dueDate: "10/04/2026", items: 22 },
   { id: "5", card: "Itaú Personnalité Black", month: "Março/2026", amount: 13900.0, status: "paid", dueDate: "15/04/2026", items: 38 },
 ];
+
+export const debts = [
+  { id: "1", institution: "Itaú", type: "Financiamento Imóvel", originalAmount: 420000, balance: 312400, rate: 9.8, cet: 10.6, installments: 360, paid: 72, remaining: 288, monthly: 3850.4, dueDay: 10, status: "em dia", collateral: "Imóvel Apto 142" },
+  { id: "2", institution: "BTG Pactual", type: "Empréstimo Pessoal", originalAmount: 60000, balance: 38200, rate: 2.1, cet: 28.4, installments: 36, paid: 14, remaining: 22, monthly: 2180.5, dueDay: 15, status: "em dia", collateral: null },
+  { id: "3", institution: "Santander", type: "Veículo", originalAmount: 95000, balance: 41800, rate: 1.65, cet: 22.1, installments: 48, paid: 28, remaining: 20, monthly: 2620.9, dueDay: 8, status: "em dia", collateral: "Veículo HRV 2023" },
+  { id: "4", institution: "Nubank", type: "Cartão Rotativo", originalAmount: 12000, balance: 9450.3, rate: 14.5, cet: 410.2, installments: 12, paid: 2, remaining: 10, monthly: 1180.6, dueDay: 10, status: "atrasado", collateral: null },
+  { id: "5", institution: "Caixa", type: "Consignado", originalAmount: 40000, balance: 18900, rate: 1.45, cet: 19.8, installments: 60, paid: 32, remaining: 28, monthly: 980.0, dueDay: 5, status: "em dia", collateral: null },
+  { id: "6", institution: "Bradesco", type: "Renegociação", originalAmount: 28000, balance: 14200, rate: 2.8, cet: 38.6, installments: 24, paid: 12, remaining: 12, monthly: 1380.0, dueDay: 20, status: "renegociado", collateral: null },
+];
+
+export const fgtsAccounts = [
+  { id: "1", employer: "Tech Holding S.A.", cnpj: "12.345.678/0001-90", status: "ativa", balance: 48230.5, lastUpdate: "2026-04-15", monthlyDeposit: 1480.0, withdrawals: 0, jam: 312.4 },
+  { id: "2", employer: "Consultoria Prima Ltda.", cnpj: "98.765.432/0001-10", status: "inativa", balance: 18920.8, lastUpdate: "2025-11-20", monthlyDeposit: 0, withdrawals: 4200, jam: 142.8 },
+  { id: "3", employer: "Banco Beta S.A.", cnpj: "55.444.333/0001-22", status: "inativa", balance: 9420.15, lastUpdate: "2024-08-10", monthlyDeposit: 0, withdrawals: 0, jam: 84.2 },
+];
+
+export const fgtsHistory = [
+  { month: "Nov", balance: 68200 },
+  { month: "Dez", balance: 70100 },
+  { month: "Jan", balance: 71800 },
+  { month: "Fev", balance: 73400 },
+  { month: "Mar", balance: 75100 },
+  { month: "Abr", balance: 76571 },
+];
