@@ -632,6 +632,11 @@ function ChatPage() {
 
   const handleFiles = (list: FileList | null) => {
     if (!list) return;
+    if (!user) {
+      toast.error("Faça login para anexar documentos.");
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
     const next = Array.from(list);
     setPending((p) => [...p, ...next]);
     if (fileRef.current) fileRef.current.value = "";
