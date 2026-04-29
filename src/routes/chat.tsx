@@ -57,6 +57,7 @@ type Message = {
   metadata: {
     attachments?: AttachmentMeta[];
     pendingAction?: PendingActionData;
+    importSession?: ImportSessionSummary;
   } | null;
 };
 type AttachmentMeta = {
@@ -217,6 +218,7 @@ function ChatPage() {
   const { user } = useAuth();
   const aiChat = useServerFn(aiFinancialChat);
   const extractDoc = useServerFn(extractDocument);
+  const startImportFn = useServerFn(startImport);
   const qc = useQueryClient();
   const invalidateConvs = useInvalidate("ai_conversations");
   const [activeId, setActiveId] = useState<string | null>(null);
