@@ -235,7 +235,7 @@ export function parseExtratoFromText(text: string): RawTx[] {
     if (!currentDate) return;
     const amt = parseBrAmount(amountLine.match(AMOUNT_RE_GLOBAL)?.[0] ?? "");
     if (!amt) return;
-    const hasMinusBeforeAmount = /-\s*R?\$?\s*\d/.test(amountLine);
+    const hasMinusBeforeAmount = /[-−–—]\s*R?\$?\s*\d/.test(amountLine);
     const desc = buffer.join(" ").replace(/\s+/g, " ").trim();
     if (!desc) return;
     if (isLikelyHeaderOrBalance(desc)) return;
@@ -285,7 +285,7 @@ export function parseExtratoFromText(text: string): RawTx[] {
         let kind: "income" | "expense";
         if (ind === "c" || ind.startsWith("cr") || ind === "+") kind = "income";
         else if (ind === "d" || ind.startsWith("d") || ind === "-") kind = "expense";
-        else kind = inferKind(before, amt.isNegative, /-\s*R?\$?\s*\d/.test(line.slice(0, idx + lastAmt.length).slice(-15)));
+        else kind = inferKind(before, amt.isNegative, /[-−–—]\s*R?\$?\s*\d/.test(line.slice(0, idx + lastAmt.length).slice(-15)));
         if (!isLikelyHeaderOrBalance(before)) {
           txs.push({
             occurred_at: dt,
