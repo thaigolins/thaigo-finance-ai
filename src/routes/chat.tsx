@@ -212,7 +212,34 @@ function detectExtractorKind(
   return null;
 }
 
-
+function detectBankInText(text: string, accounts: { id: string; bank: string }[]): string | null {
+  const t = text.toLowerCase();
+  for (const acc of accounts) {
+    if (acc.bank && t.includes(acc.bank.toLowerCase())) return acc.id;
+  }
+  // Nomes/aliases comuns
+  const bankNames: Record<string, string[]> = {
+    safra: ["safra"],
+    nubank: ["nubank", "nu "],
+    "itaú": ["itaú", "itau"],
+    bradesco: ["bradesco"],
+    inter: ["inter"],
+    bb: ["banco do brasil", " bb "],
+    caixa: ["caixa"],
+    santander: ["santander"],
+    c6: ["c6"],
+    btg: ["btg"],
+  };
+  for (const acc of accounts) {
+    const bankKey = (acc.bank ?? "").toLowerCase();
+    for (const [, aliases] of Object.entries(bankNames)) {
+      if (aliases.some((a) => bankKey.includes(a)) && aliases.some((a2) => t.includes(a2))) {
+        return acc.id;
+      }
+    }
+  }
+  return null;
+}
 
 function ChatPage() {
   const { user } = useAuth();
