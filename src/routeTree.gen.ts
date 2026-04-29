@@ -20,6 +20,7 @@ import { Route as ExtratosRouteImport } from './routes/extratos'
 import { Route as DividasRouteImport } from './routes/dividas'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as CartoesRouteImport } from './routes/cartoes'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 
 const RelatoriosRoute = RelatoriosRouteImport.update({
@@ -77,6 +78,11 @@ const CartoesRoute = CartoesRouteImport.update({
   path: '/cartoes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -85,6 +91,7 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/cartoes': typeof CartoesRoute
   '/chat': typeof ChatRoute
   '/dividas': typeof DividasRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/cartoes': typeof CartoesRoute
   '/chat': typeof ChatRoute
   '/dividas': typeof DividasRoute
@@ -114,6 +122,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/cartoes': typeof CartoesRoute
   '/chat': typeof ChatRoute
   '/dividas': typeof DividasRoute
@@ -130,6 +139,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/auth'
     | '/cartoes'
     | '/chat'
     | '/dividas'
@@ -144,6 +154,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/auth'
     | '/cartoes'
     | '/chat'
     | '/dividas'
@@ -158,6 +169,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/auth'
     | '/cartoes'
     | '/chat'
     | '/dividas'
@@ -173,6 +185,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRoute
   CartoesRoute: typeof CartoesRoute
   ChatRoute: typeof ChatRoute
   DividasRoute: typeof DividasRoute
@@ -265,6 +278,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CartoesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -277,6 +297,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthRoute: AuthRoute,
   CartoesRoute: CartoesRoute,
   ChatRoute: ChatRoute,
   DividasRoute: DividasRoute,
