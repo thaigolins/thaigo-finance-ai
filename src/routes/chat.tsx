@@ -405,6 +405,12 @@ function ChatPage() {
               );
               return false;
             }
+            const { data: sessData } = await supabase.auth.getSession();
+            const token = sessData.session?.access_token;
+            if (!token) {
+              await persistMessage(convId!, "assistant", "Sessão expirada. Faça login novamente.", []);
+              return false;
+            }
             let r: { ok: boolean; sessionId?: string; error?: string } | null = null;
             try {
               r = await startImportFn({
@@ -414,6 +420,7 @@ function ChatPage() {
                   filename: att.filename,
                   mime: att.mime || (att.bucket === "images" ? "image/jpeg" : "application/pdf"),
                   kind: "extrato",
+                  token: token,
                   uploadedFileId: uploadedFileId ?? undefined,
                   conversationId: convId!,
                 },
