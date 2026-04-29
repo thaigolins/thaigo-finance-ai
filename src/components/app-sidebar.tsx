@@ -131,21 +131,42 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border/60 p-3">
+      <SidebarFooter className="border-t border-sidebar-border/60 p-3 space-y-2">
         {!collapsed ? (
-          <div className="flex items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/30 p-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-primary/30 bg-emerald-soft text-sm font-semibold text-primary">
-              T
+          <>
+            <div className="flex items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/30 p-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-primary/30 bg-emerald-soft text-sm font-semibold text-primary">
+                {initial}
+              </div>
+              <div className="flex min-w-0 flex-col leading-tight">
+                <span className="truncate text-[13px] font-medium">{displayName}</span>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Private Client</span>
+              </div>
             </div>
-            <div className="flex flex-col leading-tight">
-              <span className="text-[13px] font-medium">Thaigo Silva</span>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Private Client</span>
-            </div>
-          </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => signOut()}
+              className="w-full justify-start gap-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            >
+              <LogOut className="h-4 w-4" /> Sair
+            </Button>
+          </>
         ) : (
-          <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full border border-primary/30 bg-emerald-soft text-sm font-semibold text-primary">
-            T
-          </div>
+          <>
+            <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full border border-primary/30 bg-emerald-soft text-sm font-semibold text-primary">
+              {initial}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => signOut()}
+              className="mx-auto h-9 w-9 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              aria-label="Sair"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </>
         )}
       </SidebarFooter>
     </Sidebar>

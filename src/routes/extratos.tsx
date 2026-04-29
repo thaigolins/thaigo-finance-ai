@@ -1,10 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Upload, ArrowDownRight, ArrowUpRight, Download } from "lucide-react";
+import { Upload, ArrowDownRight, ArrowUpRight, FileText, Loader2, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/empty-state";
 import { formatBRL } from "@/lib/format";
-import { transactions } from "@/lib/mock-data";
+import { useUserList, useUserInsert, useUserDelete } from "@/lib/queries";
+import { uploadFile, getSignedUrl } from "@/lib/storage";
+import { useAuth } from "@/lib/auth-context";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/extratos")({
   head: () => ({
@@ -16,11 +21,82 @@ export const Route = createFileRoute("/extratos")({
   component: ExtratosPage,
 });
 
+type Tx = {
+  id: string;
+  description: string;
+  amount: number;
+  occurred_at: string;
+  kind: "income" | "expense" | "transfer";
+  bank_account_id: string | null;
+};
+
+type Account = { id: string; bank: string };
+
+type Upload = {
+  id: string;
+  filename: string;
+  size_bytes: number | null;
+  bucket: string;
+  path: string;
+  created_at: string;
+  ai_processed: boolean;
+};
+
 function ExtratosPage() {
-  const grouped = transactions.reduce<Record<string, typeof transactions>>((acc, t) => {
-    (acc[t.date] ||= []).push(t);
+  const { user } = useAuth();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const { data: txs = [] } = useUserList<Tx>("bank_transactions", { orderBy: "occurred_at" });
+  const { data: accounts = [] } = useUserList<Account>("bank_accounts");
+  const { data: uploads = [] } = useUserList<Upload>("uploaded_files", { orderBy: "created_at" });
+  const insertUpload = useUserInsert<Record<string, unknown>>("uploaded_files");
+  const removeUpload = useUserDelete("uploaded_files");
+
+  const bankUploads = uploads.filter((u) => u.bucket === "bank-statements");
+
+  const grouped = txs.reduce<Record<string, Tx[]>>((acc, t) => {
+    (acc[t.occurred_at] ||= []).push(t);
     return acc;
   }, {});
+
+  const accountName = (id: string | null) =>
+    accounts.find((a) => a.id === id)?.bank ?? "Sem conta";
+
+  const handleFile = async (file: File) => {
+    if (!user?.id) return;
+    setUploading(true);
+    try {
+      const meta = await uploadFile({
+        bucket: "bank-statements",
+        userId: user.id,
+        file,
+      });
+      await insertUpload.mutateAsync({
+        bucket: "bank-statements",
+        path: meta.path,
+        filename: meta.filename,
+        mime_type: meta.mime,
+        size_bytes: meta.size,
+        kind: "bank_statement",
+      });
+      toast.success("Extrato enviado");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha no upload");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const openUpload = async (u: Upload) => {
+    try {
+      const url = await getSignedUrl(u.bucket as never, u.path);
+      window.open(url, "_blank");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao abrir arquivo");
+    }
+  };
+
   return (
     <>
       <AppHeader title="Extratos" subtitle="Histórico bancário" exportModule="Extratos" />
@@ -28,57 +104,134 @@ function ExtratosPage() {
         <section className="flex flex-col gap-4 rounded-3xl border border-dashed border-primary/40 bg-primary/5 p-6 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
-              <Upload className="h-6 w-6"/>
+              <Upload className="h-6 w-6" />
             </div>
             <div>
               <h3 className="text-base font-semibold">Importar extrato bancário</h3>
-              <p className="text-sm text-muted-foreground">Suporte a PDF, OFX e CSV — categorização automática.</p>
+              <p className="text-sm text-muted-foreground">
+                Suporte a PDF, OFX e CSV — armazenado com criptografia.
+              </p>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" className="border-border/60"><Download className="mr-1.5 h-4 w-4"/> Exportar</Button>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-              <Upload className="mr-1.5 h-4 w-4"/> Importar
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,.ofx,.csv,image/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+              }}
+            />
+            <Button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Enviando...
+                </>
+              ) : (
+                <>
+                  <Upload className="mr-1.5 h-4 w-4" /> Importar
+                </>
+              )}
             </Button>
           </div>
         </section>
 
-        <section className="space-y-4">
-          {Object.entries(grouped).map(([date, items]) => {
-            const dayTotal = items.reduce((s, i) => s + i.amount, 0);
-            return (
-              <div key={date} className="rounded-2xl border border-border/60 bg-card shadow-card overflow-hidden">
-                <div className="flex items-center justify-between border-b border-border/60 bg-muted/20 px-5 py-3">
-                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{date}</span>
-                  <span className={`text-xs font-semibold ${dayTotal>=0?"text-success":"text-foreground"}`}>
-                    {dayTotal>=0?"+":""}{formatBRL(dayTotal)}
-                  </span>
-                </div>
-                <div className="divide-y divide-border/60">
-                  {items.map((t) => (
-                    <div key={t.id} className="flex items-center justify-between px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`flex h-8 w-8 items-center justify-center rounded-full ${t.amount>0?"bg-success/10 text-success":"bg-muted/50 text-muted-foreground"}`}>
-                          {t.amount>0 ? <ArrowUpRight className="h-4 w-4"/> : <ArrowDownRight className="h-4 w-4"/>}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">{t.description}</p>
-                          <div className="mt-0.5 flex items-center gap-2">
-                            <Badge variant="outline" className="border-border/60 text-[10px] py-0">{t.category}</Badge>
-                            <span className="text-xs text-muted-foreground">{t.account}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <span className={`text-sm font-semibold ${t.amount>0?"text-success":"text-foreground"}`}>
-                        {t.amount>0?"+":""}{formatBRL(t.amount)}
-                      </span>
+        {bankUploads.length > 0 && (
+          <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-card">
+            <h3 className="mb-3 text-sm font-semibold">Arquivos importados</h3>
+            <div className="divide-y divide-border/60">
+              {bankUploads.map((u) => (
+                <div key={u.id} className="flex items-center justify-between py-3">
+                  <button
+                    onClick={() => openUpload(u)}
+                    className="flex min-w-0 items-center gap-3 text-left transition hover:text-primary"
+                  >
+                    <FileText className="h-4 w-4 shrink-0 text-primary" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{u.filename}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {new Date(u.created_at).toLocaleString("pt-BR")} ·{" "}
+                        {u.size_bytes ? `${(u.size_bytes / 1024).toFixed(1)} KB` : "—"}
+                      </p>
                     </div>
-                  ))}
+                  </button>
+                  <button
+                    onClick={() => removeUpload.mutate(u.id)}
+                    className="rounded-md p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Remover"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              </div>
-            );
-          })}
-        </section>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {txs.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="Sem movimentações"
+            description="Importe um extrato bancário ou registre transações em Financeiro para visualizar seu histórico aqui."
+          />
+        ) : (
+          <section className="space-y-4">
+            {Object.entries(grouped).map(([date, items]) => {
+              const dayTotal = items.reduce(
+                (s, i) => s + (i.kind === "income" ? Number(i.amount) : -Math.abs(Number(i.amount))),
+                0,
+              );
+              return (
+                <div key={date} className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-card">
+                  <div className="flex items-center justify-between border-b border-border/60 bg-muted/20 px-5 py-3">
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{date}</span>
+                    <span className={`text-xs font-semibold ${dayTotal >= 0 ? "text-success" : "text-foreground"}`}>
+                      {dayTotal >= 0 ? "+" : ""}
+                      {formatBRL(dayTotal)}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-border/60">
+                    {items.map((t) => {
+                      const positive = t.kind === "income";
+                      return (
+                        <div key={t.id} className="flex items-center justify-between px-5 py-3">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                                positive ? "bg-success/10 text-success" : "bg-muted/50 text-muted-foreground"
+                              }`}
+                            >
+                              {positive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">{t.description}</p>
+                              <div className="mt-0.5 flex items-center gap-2">
+                                <Badge variant="outline" className="border-border/60 py-0 text-[10px]">
+                                  {t.kind}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">{accountName(t.bank_account_id)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <span className={`text-sm font-semibold ${positive ? "text-success" : "text-foreground"}`}>
+                            {positive ? "+" : "-"}
+                            {formatBRL(Math.abs(Number(t.amount)))}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        )}
       </main>
     </>
   );
