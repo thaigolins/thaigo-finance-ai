@@ -68,7 +68,7 @@ function Dashboard() {
 
   return (
     <>
-      <AppHeader title="Dashboard" subtitle="Visão geral · Abril 2026" />
+      <AppHeader title="Dashboard" subtitle="Visão geral · Abril 2026" exportModule="Dashboard" />
       <main className="flex-1 space-y-8 p-4 md:p-8">
         {/* Hero balance — minimal & elegant */}
         <section className="relative overflow-hidden rounded-3xl border border-border/40 bg-card p-8 shadow-elegant md:p-10">

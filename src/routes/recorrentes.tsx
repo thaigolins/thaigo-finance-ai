@@ -20,7 +20,7 @@ function RecorrentesPage() {
   const total = recurring.reduce((s, r) => s + r.amount, 0);
   return (
     <>
-      <AppHeader title="Contas recorrentes" subtitle="Despesas fixas mensais" />
+      <AppHeader title="Contas recorrentes" subtitle="Despesas fixas mensais" exportModule="Recorrentes" />
       <main className="flex-1 space-y-6 p-4 md:p-6">
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-border/60 bg-gradient-card p-5 shadow-card md:col-span-2">

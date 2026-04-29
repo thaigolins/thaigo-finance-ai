@@ -34,7 +34,7 @@ function FaturasPage() {
 
   return (
     <>
-      <AppHeader title="Faturas" subtitle="Cartões de crédito · Importação inteligente" />
+      <AppHeader title="Faturas" subtitle="Cartões de crédito · Importação inteligente" exportModule="Faturas" />
       <main className="flex-1 space-y-8 p-4 md:p-8">
         {/* Upload zone — premium */}
         <section

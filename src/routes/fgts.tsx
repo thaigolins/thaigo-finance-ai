@@ -58,7 +58,7 @@ function FgtsPage() {
 
   return (
     <>
-      <AppHeader title="FGTS" subtitle="Saldo, contas e evolução por empregador" />
+      <AppHeader title="FGTS" subtitle="Saldo, contas e evolução por empregador" exportModule="FGTS" />
       <main className="flex-1 space-y-8 p-4 md:p-8">
         <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard

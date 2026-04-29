@@ -31,7 +31,7 @@ function InvestimentosPage() {
   const avgReturn = investments.reduce((s, i) => s + i.return * (i.amount / total), 0);
   return (
     <>
-      <AppHeader title="Investimentos" subtitle="Sua carteira" />
+      <AppHeader title="Investimentos" subtitle="Sua carteira" exportModule="Investimentos" />
       <main className="flex-1 space-y-6 p-4 md:p-6">
         <section className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-border/60 bg-gradient-card p-6 shadow-elegant md:col-span-2">

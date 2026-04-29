@@ -20,7 +20,7 @@ function FinanceiroPage() {
   const total = accounts.reduce((s, a) => s + a.balance, 0);
   return (
     <>
-      <AppHeader title="Financeiro" subtitle="Contas e movimentações" />
+      <AppHeader title="Financeiro" subtitle="Contas e movimentações" exportModule="Financeiro" />
       <main className="flex-1 space-y-6 p-4 md:p-6">
         <div className="rounded-3xl border border-border/60 bg-gradient-card p-6 shadow-elegant">
           <p className="text-xs uppercase tracking-widest text-primary">Saldo consolidado</p>
