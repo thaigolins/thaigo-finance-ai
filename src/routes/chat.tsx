@@ -34,7 +34,7 @@ import { uploadFile, type StorageBucket } from "@/lib/storage";
 import { useUserList, useUserInsert, useUserDelete, useInvalidate } from "@/lib/queries";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { extractDocument } from "@/server/document-extraction.functions";
-import { startImport } from "@/server/import-engine.functions";
+import { startImport, listSession } from "@/server/import-engine.functions";
 import { PendingActionCard, type PendingActionData } from "@/components/pending-action-card";
 import { ImportSessionCard, type ImportSessionSummary } from "@/components/import-session-card";
 
@@ -219,6 +219,7 @@ function ChatPage() {
   const aiChat = useServerFn(aiFinancialChat);
   const extractDoc = useServerFn(extractDocument);
   const startImportFn = useServerFn(startImport);
+  const listSessionFn = useServerFn(listSession);
   const qc = useQueryClient();
   const invalidateConvs = useInvalidate("ai_conversations");
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -434,30 +435,49 @@ function ChatPage() {
               );
               return false;
             }
-            if (r && r.ok) {
-              const intro = `Li seu **extrato** (\`${att.filename}\`) e identifiquei **${r.totalCount} lançamento(s)**${r.duplicateCount > 0 ? ` · ${r.duplicateCount} possível(eis) duplicata(s)` : ""}. Revise antes de gravar.`;
+            if (r && r.ok && r.sessionId) {
+              // Busca os dados detalhados da sessão direto do banco
+              let summary: ImportSessionSummary = {
+                sessionId: r.sessionId,
+                totalCount: 0,
+                duplicateCount: 0,
+                totalCredits: 0,
+                totalDebits: 0,
+                net: 0,
+                bankHint: null,
+                periodStart: null,
+                periodEnd: null,
+              };
+              try {
+                const ls: any = await listSessionFn({ data: { sessionId: r.sessionId } });
+                if (ls?.ok && ls.session) {
+                  const s = ls.session;
+                  summary = {
+                    sessionId: r.sessionId,
+                    totalCount: Number(s.total_count ?? 0),
+                    duplicateCount: Number(s.duplicate_count ?? 0),
+                    totalCredits: Number(s.total_credits ?? 0),
+                    totalDebits: Number(s.total_debits ?? 0),
+                    net: Number(s.net_amount ?? 0),
+                    bankHint: s.bank_hint ?? null,
+                    periodStart: s.period_start ?? null,
+                    periodEnd: s.period_end ?? null,
+                  };
+                }
+              } catch (e) {
+                console.error("[chat] listSession failed", e);
+              }
+              const intro = `Li seu **extrato** (\`${att.filename}\`) e identifiquei **${summary.totalCount} lançamento(s)**${summary.duplicateCount > 0 ? ` · ${summary.duplicateCount} possível(eis) duplicata(s)` : ""}. Revise antes de gravar.`;
               await persistMessage(convId!, "assistant", intro, [], {
-                importSession: {
-                  sessionId: r.sessionId,
-                  totalCount: r.totalCount,
-                  duplicateCount: r.duplicateCount,
-                  totalCredits: r.totalCredits,
-                  totalDebits: r.totalDebits,
-                  net: r.net,
-                  bankHint: r.bankHint,
-                  periodStart: r.periodStart,
-                  periodEnd: r.periodEnd,
-                },
+                importSession: summary,
               });
               return true;
             }
-            const reasonEx =
-              (r && (r.error || r.message)) ||
-              "nenhum detalhe retornado";
+            const reasonEx = (r && (r.error || r.message)) || "nenhum detalhe retornado";
             await persistMessage(
               convId!,
               "assistant",
-              `IMPORT ENGINE vNEXT :: ${reasonEx}`,
+              `Não foi possível processar o extrato: ${reasonEx}`,
               [],
             );
             return false;
