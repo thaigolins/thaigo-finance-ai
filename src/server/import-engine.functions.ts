@@ -70,14 +70,46 @@ async function logAudit(supabase: any, params: {
 }
 
 export const startImport = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d) => StartInput.parse(d))
-  .handler(async ({ data, context }) => {
-    console.log("[startImport] MIDDLEWARE_VERSION", "custom-v2", new Date().toISOString());
-    const { supabase: sbTyped, userId } = context;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = sbTyped as any;
+  .handler(async ({ data }) => {
+    console.log("[startImport] MIDDLEWARE_VERSION", "manual-auth-v3", new Date().toISOString());
 
+    // Auth manual: extrai token do header Authorization da requisição
+    const request = getRequest();
+    const authHeader = request?.headers?.get?.("authorization") ?? "";
+    let token = authHeader.replace(/^Bearer\s+/i, "").trim();
+
+    // Fallback: cookie sb-*-auth-token
+    if (!token && request?.headers) {
+      const cookieHeader = request.headers.get("cookie") ?? "";
+      const match = cookieHeader.match(/sb-[^=]+-auth-token=([^;]+)/);
+      if (match) {
+        try {
+          const decoded = decodeURIComponent(match[1]);
+          const parsed = JSON.parse(decoded);
+          token = parsed?.access_token ?? "";
+        } catch { /* ignore */ }
+      }
+    }
+
+    if (!token) {
+      throw new Error("Unauthorized: token ausente");
+    }
+
+    const SUPABASE_URL = process.env.SUPABASE_URL!;
+    const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase: any = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+    });
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user) {
+      throw new Error("Unauthorized: sessão inválida");
+    }
+    const userId = userData.user.id as string;
     console.log("[startImport] VERSION_IMPORT_ENGINE_29APR step=begin", {
       userId,
       bucket: data.bucket,
