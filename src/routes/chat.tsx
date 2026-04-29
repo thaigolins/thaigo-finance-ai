@@ -438,11 +438,13 @@ function ChatPage() {
               return true;
             }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const reasonEx = (r as any)?.error || (r as any)?.message || "DEBUG v2: startImport retornou sem error/message";
+            const reasonEx =
+              (r && (r.error || r.message)) ||
+              `DEBUG v3: startImport retornou ${r === undefined ? "undefined" : r === null ? "null" : JSON.stringify(r).slice(0, 300)}`;
             await persistMessage(
               convId!,
               "assistant",
-              `DEBUG v2 · Não consegui extrair os dados de **${att.filename}**. Motivo real: ${reasonEx}`,
+              `DEBUG v3 · Não consegui extrair os dados de **${att.filename}**. Motivo real: ${reasonEx}`,
               [],
             );
             return false;
