@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Send, Sparkles, TrendingUp, PiggyBank, Receipt, Lightbulb, Paperclip, Mic, Landmark, Banknote } from "lucide-react";
+import { Send, Sparkles, TrendingUp, PiggyBank, Receipt, Lightbulb, Paperclip, Mic, Landmark, Banknote, FileDown } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { generatePdf, buildPayload, type PdfKind } from "@/lib/pdf-export";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({
