@@ -1,5 +1,6 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts, useRouterState, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Toaster } from "@/components/ui/sonner";
@@ -61,10 +62,20 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: { staleTime: 30_000, refetchOnWindowFocus: false, retry: 1 },
+        },
+      }),
+  );
   return (
-    <AuthProvider>
-      <AuthGate />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 
