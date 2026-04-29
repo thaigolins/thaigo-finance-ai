@@ -482,22 +482,42 @@ export const confirmStaging = createServerFn({ method: "POST" })
       })
       .eq("id", data.sessionId);
 
-    // Recalcula saldo da conta bancária quando há vínculo
+    // Atualiza saldo da conta bancária quando há vínculo
     if (accountId) {
-      const { data: allTxs } = await supabase
-        .from("bank_transactions")
-        .select("amount, kind")
-        .eq("bank_account_id", accountId)
-        .eq("user_id", userId);
-      if (allTxs) {
-        const newBalance = (allTxs as { amount: number; kind: string }[]).reduce((sum, tx) => {
-          return sum + (tx.kind === "income" ? Number(tx.amount) : -Number(tx.amount));
-        }, 0);
+      // Busca o closing_balance da sessão de importação (saldo real do extrato)
+      const sessBalance = await supabase
+        .from("import_sessions")
+        .select("closing_balance")
+        .eq("id", data.sessionId)
+        .maybeSingle();
+
+      const closingBalance = (sessBalance.data as { closing_balance: number | null } | null)?.closing_balance;
+
+      if (closingBalance !== null && closingBalance !== undefined) {
+        // Usa o saldo real informado pelo extrato
         await supabase
           .from("bank_accounts")
-          .update({ balance: newBalance })
+          .update({ balance: closingBalance })
           .eq("id", accountId)
           .eq("user_id", userId);
+      } else {
+        // Fallback: recalcula pela soma dos lançamentos
+        const { data: allTxs } = await supabase
+          .from("bank_transactions")
+          .select("amount, kind")
+          .eq("bank_account_id", accountId)
+          .eq("user_id", userId);
+
+        if (allTxs) {
+          const newBalance = (allTxs as { amount: number; kind: string }[]).reduce((sum, tx) => {
+            return sum + (tx.kind === "income" ? Number(tx.amount) : -Number(tx.amount));
+          }, 0);
+          await supabase
+            .from("bank_accounts")
+            .update({ balance: newBalance })
+            .eq("id", accountId)
+            .eq("user_id", userId);
+        }
       }
     }
 
