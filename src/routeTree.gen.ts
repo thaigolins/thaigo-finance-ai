@@ -14,8 +14,10 @@ import { Route as RecorrentesRouteImport } from './routes/recorrentes'
 import { Route as MetasRouteImport } from './routes/metas'
 import { Route as InvestimentosRouteImport } from './routes/investimentos'
 import { Route as FinanceiroRouteImport } from './routes/financeiro'
+import { Route as FgtsRouteImport } from './routes/fgts'
 import { Route as FaturasRouteImport } from './routes/faturas'
 import { Route as ExtratosRouteImport } from './routes/extratos'
+import { Route as DividasRouteImport } from './routes/dividas'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as CartoesRouteImport } from './routes/cartoes'
 import { Route as IndexRouteImport } from './routes/index'
@@ -45,6 +47,11 @@ const FinanceiroRoute = FinanceiroRouteImport.update({
   path: '/financeiro',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FgtsRoute = FgtsRouteImport.update({
+  id: '/fgts',
+  path: '/fgts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FaturasRoute = FaturasRouteImport.update({
   id: '/faturas',
   path: '/faturas',
@@ -53,6 +60,11 @@ const FaturasRoute = FaturasRouteImport.update({
 const ExtratosRoute = ExtratosRouteImport.update({
   id: '/extratos',
   path: '/extratos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DividasRoute = DividasRouteImport.update({
+  id: '/dividas',
+  path: '/dividas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChatRoute = ChatRouteImport.update({
@@ -75,8 +87,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cartoes': typeof CartoesRoute
   '/chat': typeof ChatRoute
+  '/dividas': typeof DividasRoute
   '/extratos': typeof ExtratosRoute
   '/faturas': typeof FaturasRoute
+  '/fgts': typeof FgtsRoute
   '/financeiro': typeof FinanceiroRoute
   '/investimentos': typeof InvestimentosRoute
   '/metas': typeof MetasRoute
@@ -87,8 +101,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/cartoes': typeof CartoesRoute
   '/chat': typeof ChatRoute
+  '/dividas': typeof DividasRoute
   '/extratos': typeof ExtratosRoute
   '/faturas': typeof FaturasRoute
+  '/fgts': typeof FgtsRoute
   '/financeiro': typeof FinanceiroRoute
   '/investimentos': typeof InvestimentosRoute
   '/metas': typeof MetasRoute
@@ -100,8 +116,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/cartoes': typeof CartoesRoute
   '/chat': typeof ChatRoute
+  '/dividas': typeof DividasRoute
   '/extratos': typeof ExtratosRoute
   '/faturas': typeof FaturasRoute
+  '/fgts': typeof FgtsRoute
   '/financeiro': typeof FinanceiroRoute
   '/investimentos': typeof InvestimentosRoute
   '/metas': typeof MetasRoute
@@ -114,8 +132,10 @@ export interface FileRouteTypes {
     | '/'
     | '/cartoes'
     | '/chat'
+    | '/dividas'
     | '/extratos'
     | '/faturas'
+    | '/fgts'
     | '/financeiro'
     | '/investimentos'
     | '/metas'
@@ -126,8 +146,10 @@ export interface FileRouteTypes {
     | '/'
     | '/cartoes'
     | '/chat'
+    | '/dividas'
     | '/extratos'
     | '/faturas'
+    | '/fgts'
     | '/financeiro'
     | '/investimentos'
     | '/metas'
@@ -138,8 +160,10 @@ export interface FileRouteTypes {
     | '/'
     | '/cartoes'
     | '/chat'
+    | '/dividas'
     | '/extratos'
     | '/faturas'
+    | '/fgts'
     | '/financeiro'
     | '/investimentos'
     | '/metas'
@@ -151,8 +175,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CartoesRoute: typeof CartoesRoute
   ChatRoute: typeof ChatRoute
+  DividasRoute: typeof DividasRoute
   ExtratosRoute: typeof ExtratosRoute
   FaturasRoute: typeof FaturasRoute
+  FgtsRoute: typeof FgtsRoute
   FinanceiroRoute: typeof FinanceiroRoute
   InvestimentosRoute: typeof InvestimentosRoute
   MetasRoute: typeof MetasRoute
@@ -197,6 +223,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceiroRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/fgts': {
+      id: '/fgts'
+      path: '/fgts'
+      fullPath: '/fgts'
+      preLoaderRoute: typeof FgtsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/faturas': {
       id: '/faturas'
       path: '/faturas'
@@ -209,6 +242,13 @@ declare module '@tanstack/react-router' {
       path: '/extratos'
       fullPath: '/extratos'
       preLoaderRoute: typeof ExtratosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dividas': {
+      id: '/dividas'
+      path: '/dividas'
+      fullPath: '/dividas'
+      preLoaderRoute: typeof DividasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/chat': {
@@ -239,8 +279,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CartoesRoute: CartoesRoute,
   ChatRoute: ChatRoute,
+  DividasRoute: DividasRoute,
   ExtratosRoute: ExtratosRoute,
   FaturasRoute: FaturasRoute,
+  FgtsRoute: FgtsRoute,
   FinanceiroRoute: FinanceiroRoute,
   InvestimentosRoute: InvestimentosRoute,
   MetasRoute: MetasRoute,

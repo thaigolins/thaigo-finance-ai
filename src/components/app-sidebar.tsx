@@ -10,6 +10,8 @@ import {
   TrendingUp,
   BarChart3,
   Sparkles,
+  Landmark,
+  Banknote,
 } from "lucide-react";
 
 import {
@@ -33,6 +35,8 @@ const mainItems = [
   { title: "Faturas", url: "/faturas", icon: Receipt },
   { title: "Extratos", url: "/extratos", icon: FileText },
   { title: "Recorrentes", url: "/recorrentes", icon: Repeat },
+  { title: "Empréstimos & Dívidas", url: "/dividas", icon: Landmark },
+  { title: "FGTS", url: "/fgts", icon: Banknote },
 ];
 
 const planningItems = [

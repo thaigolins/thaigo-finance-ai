@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Send, Sparkles, TrendingUp, PiggyBank, Receipt, Lightbulb, Paperclip, Mic } from "lucide-react";
+import { Send, Sparkles, TrendingUp, PiggyBank, Receipt, Lightbulb, Paperclip, Mic, Landmark, Banknote } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -31,7 +31,20 @@ const suggestions = [
   { icon: Receipt, label: "Gastos por categoria", desc: "Detalhe minhas despesas de abril" },
   { icon: PiggyBank, label: "Reserva de emergência", desc: "Quanto falta para minha meta?" },
   { icon: Lightbulb, label: "Otimização", desc: "Quais assinaturas posso cortar?" },
+  { icon: Landmark, label: "Atualizar dívidas", desc: "Segue extrato do empréstimo, atualize minhas dívidas" },
+  { icon: Banknote, label: "Atualizar FGTS", desc: "Segue extrato do FGTS, atualize meu saldo" },
 ];
+
+function smartReply(text: string): string {
+  const t = text.toLowerCase();
+  if (t.includes("empréstimo") || t.includes("emprestimo") || t.includes("dívida") || t.includes("divida")) {
+    return "Recebi o extrato do empréstimo. Identifiquei: instituição **Itaú**, tipo **Financiamento Imóvel**, saldo devedor **R$ 312.400,00**, taxa **9,8% a.a.**, CET **10,6%**, **288 parcelas restantes** de **R$ 3.850,40** (vencimento dia 10).\n\nDeseja que eu **registre essa dívida** no módulo Empréstimos & Dívidas? Responda **\"confirmar\"** para gravar definitivamente ou **\"ajustar\"** para revisar os campos.";
+  }
+  if (t.includes("fgts")) {
+    return "Recebi o extrato do FGTS. Identifiquei: empregador **Tech Holding S.A.** (CNPJ 12.345.678/0001-90), conta **ativa**, saldo **R$ 48.230,50**, depósito mensal **R$ 1.480,00**, JAM do mês **R$ 312,40**, última movimentação **15/04/2026**.\n\nDeseja que eu **atualize sua conta FGTS** com esses dados? Responda **\"confirmar\"** para gravar ou **\"ajustar\"** para revisar antes.";
+  }
+  return "Analisando sua posição consolidada de abril: a maior linha de despesa foi Moradia (R$ 4.580 — 43% do total). Suas saídas recuaram 7,6% versus março, liberando R$ 870 de fluxo livre. Recomendo manter o aporte mensal de R$ 5.000 em renda fixa indexada à inflação e reavaliar duas assinaturas de baixo uso. Posso preparar um plano detalhado?";
+}
 
 function ChatPage() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -44,8 +57,7 @@ function ChatPage() {
     const reply: Message = {
       id: crypto.randomUUID(),
       role: "assistant",
-      content:
-        "Analisando sua posição consolidada de abril: a maior linha de despesa foi Moradia (R$ 4.580 — 43% do total). Suas saídas recuaram 7,6% versus março, liberando R$ 870 de fluxo livre. Recomendo manter o aporte mensal de R$ 5.000 em renda fixa indexada à inflação e reavaliar duas assinaturas de baixo uso. Posso preparar um plano detalhado?",
+      content: smartReply(trimmed),
     };
     setMessages((m) => [...m, userMsg, reply]);
     setInput("");
@@ -93,7 +105,7 @@ function ChatPage() {
                 </div>
                 <div
                   className={cn(
-                    "max-w-[78%] text-sm leading-relaxed",
+                    "max-w-[78%] whitespace-pre-line text-sm leading-relaxed",
                     m.role === "user"
                       ? "rounded-2xl rounded-tr-sm border border-border/40 bg-muted/30 px-4 py-2.5"
                       : "rounded-2xl rounded-tl-sm bg-transparent px-1 py-1 text-foreground/95",
