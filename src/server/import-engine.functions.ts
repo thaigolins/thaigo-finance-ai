@@ -71,6 +71,7 @@ export const startImport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => StartInput.parse(d))
   .handler(async ({ data, context }) => {
+    console.log("[startImport] MIDDLEWARE_VERSION", "custom-v2", new Date().toISOString());
     const { supabase: sbTyped, userId } = context;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = sbTyped as any;
