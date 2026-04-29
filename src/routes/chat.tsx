@@ -404,7 +404,7 @@ function ChatPage() {
               );
               return false;
             }
-            let r: { ok: boolean; sessionId?: string; error?: string } | null = null;
+            let r: { ok: boolean; sessionId?: string; error?: string; debugText?: string } | null = null;
             try {
               const { data: sessData } = await supabase.auth.getSession();
               const token = sessData.session?.access_token;
@@ -502,15 +502,11 @@ function ChatPage() {
               return true;
             }
             const reasonEx = (r && r.error) || "nenhum detalhe retornado";
-            // Preserva OCR preview quando vier do servidor para depuração
-            const hasOcr = reasonEx.includes("OCR preview:");
-            const baseMsg = reasonEx.startsWith("Nenhum lançamento")
-              ? `Nenhum lançamento identificado no extrato.`
+            const debugText = r?.debugText?.trim();
+            const msg = debugText
+              ? `Nenhum lançamento identificado no extrato.\n\n${reasonEx}\n\nTexto lido pela IA/OCR:\n\n\`\`\`text\n${debugText}\n\`\`\``
               : `Não foi possível processar o extrato: ${reasonEx}`;
-            const ocrTail = hasOcr
-              ? `\n\n<details><summary>OCR bruto (debug)</summary>\n\n\`\`\`\n${reasonEx.split("OCR preview:")[1]?.trim() ?? ""}\n\`\`\`\n</details>`
-              : "";
-            await persistMessage(convId!, "assistant", `${baseMsg}${ocrTail}`, []);
+            await persistMessage(convId!, "assistant", msg, []);
             return false;
           }
           const r = await extractDoc({
