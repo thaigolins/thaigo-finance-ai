@@ -268,15 +268,27 @@ export const startImport = createServerFn({ method: "POST" })
     return payload;
   });
 
-const ListInput = z.object({ sessionId: z.string().uuid() });
+const ListInput = z.object({
+  sessionId: z.string().uuid(),
+  token: z.string().min(1),
+});
 
 export const listSession = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d) => ListInput.parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase: sbTyped, userId } = context;
+  .handler(async ({ data }) => {
+    const SUPABASE_URL = process.env.SUPABASE_URL!;
+    const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = sbTyped as any;
+    const supabase: any = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${data.token}` } },
+      auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+    });
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(data.token);
+    if (userError || !userData?.user) {
+      return { ok: false as const, error: "Sessão inválida." };
+    }
+    const userId = userData.user.id;
 
     const sess = await supabase
       .from("import_sessions")

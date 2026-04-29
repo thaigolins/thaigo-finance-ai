@@ -418,7 +418,7 @@ function ChatPage() {
                   bucket: att.bucket as "invoices" | "bank-statements" | "payslips" | "fgts-statements" | "loan-contracts" | "images",
                   path: att.path,
                   filename: att.filename,
-                  mime: att.mime || (att.bucket === "images" ? "image/jpeg" : "application/pdf"),
+                  mime: att.mime || (att.filename.match(/\.png$/i) ? "image/png" : "image/jpeg"),
                   kind: "extrato",
                   token: token,
                   uploadedFileId: uploadedFileId ?? undefined,
@@ -446,7 +446,13 @@ function ChatPage() {
                 periodEnd: null,
               };
               try {
-                const ls: any = await listSessionFn({ data: { sessionId: r.sessionId } });
+                const { data: sessData2 } = await supabase.auth.getSession();
+                const ls: any = await listSessionFn({
+                  data: {
+                    sessionId: r.sessionId,
+                    token: sessData2.session?.access_token ?? token,
+                  },
+                });
                 if (ls?.ok && ls.session) {
                   const s = ls.session;
                   summary = {
