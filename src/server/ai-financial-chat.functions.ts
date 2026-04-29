@@ -103,12 +103,8 @@ function buildSystemPrompt(snap: FinancialSnapshot, userName: string | null) {
 
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
 
-async function loadSnapshot(
-  supabase: ReturnType<typeof requireSupabaseAuth.middleware> extends never
-    ? never
-    : Parameters<Parameters<typeof requireSupabaseAuth.handler>[0]>[0]["context"]["supabase"],
-  // simpler: use any-cast inside; the import-typing dance is unnecessary at runtime
-): Promise<FinancialSnapshot> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function loadSnapshot(supabase: any): Promise<FinancialSnapshot> {
   const today = new Date();
   const from = new Date(today.getFullYear(), today.getMonth(), 1)
     .toISOString()
