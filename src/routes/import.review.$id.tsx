@@ -227,7 +227,7 @@ function ReviewPage() {
 
   const onDiscard = async () => {
     if (!window.confirm("Descartar toda esta importação? Os lançamentos não confirmados serão removidos.")) return;
-    const r = await discard({ data: { sessionId: id } });
+    const r = await discard({ data: { sessionId: id, token: await getToken() } });
     if (!r.ok) {
       toast.error(r.error);
       return;
