@@ -474,12 +474,7 @@ function ChatPage() {
               return true;
             }
             const reasonEx = (r && r.error) || "nenhum detalhe retornado";
-            const debugText = r?.debugText?.trim();
-            const safeDebugText = debugText?.replace(/```/g, "``\u200b`");
-            const msg = debugText
-              ? `Nenhum lançamento identificado no extrato.\n\n${reasonEx}\n\nTexto lido pela IA/OCR:\n\n\`\`\`text\n${safeDebugText}\n\`\`\``
-              : reasonEx;
-            await persistMessage(convId!, "assistant", msg, []);
+            await persistMessage(convId!, "assistant", `Nenhum lançamento identificado no extrato.\n\n${reasonEx}`, []);
             return false;
           }
           const r = await extractDoc({
