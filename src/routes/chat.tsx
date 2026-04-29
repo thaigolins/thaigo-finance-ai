@@ -177,7 +177,36 @@ function classifyAttachment(file: File): { bucket: StorageBucket; kind: string }
   return { bucket: "bank-statements", kind: "extrato" };
 }
 
-// ============= Page =============
+// Detecta se o usuário está pedindo para extrair/lançar um anexo já enviado
+function isExtractIntent(text: string): boolean {
+  const t = text.toLowerCase();
+  return /(lan[çc]amento|lan[çc]ar|fa[çc]a lan[çc]amentos?|extrair|extra[ií]r|extra[ií]a|atualizar|desse anexo|deste anexo|do anexo|do arquivo|dessa imagem|dessa foto|processar|importar)/.test(
+    t,
+  );
+}
+
+// A partir do texto + anexo, decide o kind do extrator
+function detectExtractorKind(
+  text: string,
+  attKind?: string,
+): "fatura" | "extrato" | "fgts" | "emprestimo" | "contracheque" | null {
+  const t = text.toLowerCase();
+  // Mapeamento direto pelo kind do anexo (quando não é "imagem"/"other")
+  if (attKind === "fatura") return "fatura";
+  if (attKind === "extrato") return "extrato";
+  if (attKind === "fgts") return "fgts";
+  if (attKind === "contrato") return "emprestimo";
+  if (attKind === "contracheque") return "contracheque";
+  // Inferência por texto (útil quando o anexo é imagem)
+  if (/(fgts)/.test(t)) return "fgts";
+  if (/(contracheque|holerite|sal[áa]rio)/.test(t)) return "contracheque";
+  if (/(empr[ée]stimo|d[ií]vida|financiamento|consignado|contrato)/.test(t)) return "emprestimo";
+  if (/(fatura|cart[ãa]o)/.test(t)) return "fatura";
+  if (/(extrato|banc[áa]rio|pix|conta corrente|lan[çc]amento banc)/.test(t)) return "extrato";
+  return null;
+}
+
+
 
 function ChatPage() {
   const { user } = useAuth();
