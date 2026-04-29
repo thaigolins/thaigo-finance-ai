@@ -447,6 +447,222 @@ export type Database = {
         }
         Relationships: []
       }
+      import_sessions: {
+        Row: {
+          account_hint: string | null
+          bank_account_id: string | null
+          bank_hint: string | null
+          closing_balance: number | null
+          confirmed_count: number
+          conversation_id: string | null
+          created_at: string
+          doc_kind: Database["public"]["Enums"]["import_doc_kind"]
+          duplicate_count: number
+          error_count: number
+          errors: Json | null
+          id: string
+          message_id: string | null
+          method: Database["public"]["Enums"]["import_method"] | null
+          net_amount: number
+          opening_balance: number | null
+          pending_action_id: string | null
+          period_end: string | null
+          period_start: string | null
+          raw_extraction: Json | null
+          source_file_id: string | null
+          status: Database["public"]["Enums"]["import_session_status"]
+          total_count: number
+          total_credits: number
+          total_debits: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_hint?: string | null
+          bank_account_id?: string | null
+          bank_hint?: string | null
+          closing_balance?: number | null
+          confirmed_count?: number
+          conversation_id?: string | null
+          created_at?: string
+          doc_kind?: Database["public"]["Enums"]["import_doc_kind"]
+          duplicate_count?: number
+          error_count?: number
+          errors?: Json | null
+          id?: string
+          message_id?: string | null
+          method?: Database["public"]["Enums"]["import_method"] | null
+          net_amount?: number
+          opening_balance?: number | null
+          pending_action_id?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          raw_extraction?: Json | null
+          source_file_id?: string | null
+          status?: Database["public"]["Enums"]["import_session_status"]
+          total_count?: number
+          total_credits?: number
+          total_debits?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_hint?: string | null
+          bank_account_id?: string | null
+          bank_hint?: string | null
+          closing_balance?: number | null
+          confirmed_count?: number
+          conversation_id?: string | null
+          created_at?: string
+          doc_kind?: Database["public"]["Enums"]["import_doc_kind"]
+          duplicate_count?: number
+          error_count?: number
+          errors?: Json | null
+          id?: string
+          message_id?: string | null
+          method?: Database["public"]["Enums"]["import_method"] | null
+          net_amount?: number
+          opening_balance?: number | null
+          pending_action_id?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          raw_extraction?: Json | null
+          source_file_id?: string | null
+          status?: Database["public"]["Enums"]["import_session_status"]
+          total_count?: number
+          total_credits?: number
+          total_debits?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_sessions_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_sessions_pending_action_id_fkey"
+            columns: ["pending_action_id"]
+            isOneToOne: false
+            referencedRelation: "pending_ai_actions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_sessions_source_file_id_fkey"
+            columns: ["source_file_id"]
+            isOneToOne: false
+            referencedRelation: "uploaded_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_staging_transactions: {
+        Row: {
+          account_hint: string | null
+          amount: number
+          bank_hint: string | null
+          bank_transaction_id: string | null
+          category_hint: string | null
+          category_id: string | null
+          confidence: number | null
+          created_at: string
+          description: string
+          duplicate_of: string | null
+          edited: boolean
+          id: string
+          is_duplicate: boolean
+          kind: Database["public"]["Enums"]["tx_kind"]
+          occurred_at: string | null
+          position: number
+          raw_data: Json | null
+          raw_text: string | null
+          session_id: string
+          status: Database["public"]["Enums"]["import_staging_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_hint?: string | null
+          amount?: number
+          bank_hint?: string | null
+          bank_transaction_id?: string | null
+          category_hint?: string | null
+          category_id?: string | null
+          confidence?: number | null
+          created_at?: string
+          description?: string
+          duplicate_of?: string | null
+          edited?: boolean
+          id?: string
+          is_duplicate?: boolean
+          kind?: Database["public"]["Enums"]["tx_kind"]
+          occurred_at?: string | null
+          position?: number
+          raw_data?: Json | null
+          raw_text?: string | null
+          session_id: string
+          status?: Database["public"]["Enums"]["import_staging_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_hint?: string | null
+          amount?: number
+          bank_hint?: string | null
+          bank_transaction_id?: string | null
+          category_hint?: string | null
+          category_id?: string | null
+          confidence?: number | null
+          created_at?: string
+          description?: string
+          duplicate_of?: string | null
+          edited?: boolean
+          id?: string
+          is_duplicate?: boolean
+          kind?: Database["public"]["Enums"]["tx_kind"]
+          occurred_at?: string | null
+          position?: number
+          raw_data?: Json | null
+          raw_text?: string | null
+          session_id?: string
+          status?: Database["public"]["Enums"]["import_staging_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_staging_transactions_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_staging_transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_staging_transactions_duplicate_of_fkey"
+            columns: ["duplicate_of"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_staging_transactions_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "import_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       investments: {
         Row: {
           allocation_percent: number
@@ -1058,6 +1274,27 @@ export type Database = {
         | "image"
         | "other"
       goal_status: "active" | "achieved" | "cancelled"
+      import_doc_kind:
+        | "extrato"
+        | "fatura"
+        | "fgts"
+        | "emprestimo"
+        | "contracheque"
+        | "outro"
+      import_method:
+        | "pdf_text"
+        | "pdf_ocr"
+        | "image_ai"
+        | "csv_parser"
+        | "ofx_parser"
+        | "ai_fallback"
+      import_session_status:
+        | "extracting"
+        | "review"
+        | "confirmed"
+        | "discarded"
+        | "failed"
+      import_staging_status: "pending" | "confirmed" | "discarded" | "duplicate"
       investment_class:
         | "renda_fixa"
         | "acoes"
@@ -1241,6 +1478,30 @@ export const Constants = {
         "other",
       ],
       goal_status: ["active", "achieved", "cancelled"],
+      import_doc_kind: [
+        "extrato",
+        "fatura",
+        "fgts",
+        "emprestimo",
+        "contracheque",
+        "outro",
+      ],
+      import_method: [
+        "pdf_text",
+        "pdf_ocr",
+        "image_ai",
+        "csv_parser",
+        "ofx_parser",
+        "ai_fallback",
+      ],
+      import_session_status: [
+        "extracting",
+        "review",
+        "confirmed",
+        "discarded",
+        "failed",
+      ],
+      import_staging_status: ["pending", "confirmed", "discarded", "duplicate"],
       investment_class: [
         "renda_fixa",
         "acoes",
