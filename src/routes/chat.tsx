@@ -34,7 +34,7 @@ import { uploadFile, type StorageBucket } from "@/lib/storage";
 import { useUserList, useUserInsert, useUserDelete, useInvalidate } from "@/lib/queries";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { extractDocument } from "@/server/document-extraction.functions";
-import { listSession } from "@/server/import-engine.functions";
+import { listSession, startImport } from "@/server/import-engine.functions";
 import { PendingActionCard, type PendingActionData } from "@/components/pending-action-card";
 import { ImportSessionCard, type ImportSessionSummary } from "@/components/import-session-card";
 
@@ -219,6 +219,7 @@ function ChatPage() {
   const aiChat = useServerFn(aiFinancialChat);
   const extractDoc = useServerFn(extractDocument);
   const listSessionFn = useServerFn(listSession);
+  const startImportFn = useServerFn(startImport);
   const qc = useQueryClient();
   const invalidateConvs = useInvalidate("ai_conversations");
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -404,53 +405,24 @@ function ChatPage() {
               );
               return false;
             }
-            let r: { ok: boolean; sessionId?: string; error?: string; debugText?: string } | null = null;
+            let r: { ok: boolean; sessionId?: string; error?: string } | null = null;
             try {
-              const { data: sessData } = await supabase.auth.getSession();
-              const token = sessData.session?.access_token;
-              if (!token) {
-                await persistMessage(
-                  convId!,
-                  "assistant",
-                  `Sessão expirada. Faça login novamente.`,
-                  [],
-                );
-                return false;
-              }
-              const resp = await fetch("/api/import/extrato", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                  bucket: att.bucket,
+              r = await startImportFn({
+                data: {
+                  bucket: att.bucket as "invoices" | "bank-statements" | "payslips" | "fgts-statements" | "loan-contracts" | "images",
                   path: att.path,
                   filename: att.filename,
                   mime: att.mime || (att.bucket === "images" ? "image/jpeg" : "application/pdf"),
+                  kind: "extrato",
                   uploadedFileId: uploadedFileId ?? undefined,
                   conversationId: convId!,
-                }),
+                },
               });
-              const text = await resp.text();
-              try {
-                r = text ? JSON.parse(text) : null;
-              } catch {
-                r = { ok: false, error: `Resposta não-JSON do servidor (HTTP ${resp.status}): ${text.slice(0, 300)}` };
-              }
-              console.log("[chat] /api/import/extrato response", { status: resp.status, body: r });
-              if (!resp.ok && r?.ok !== false) {
-                r = { ok: false, error: r?.error ?? `HTTP ${resp.status}` };
-              }
+              console.log("[chat] startImport response", r);
             } catch (thrown: any) {
-              console.error("[chat] /api/import/extrato THREW", thrown);
+              console.error("[chat] startImport THREW", thrown);
               const msg = thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : String(thrown);
-              await persistMessage(
-                convId!,
-                "assistant",
-                `Não consegui processar **${att.filename}**: ${msg}`,
-                [],
-              );
+              await persistMessage(convId!, "assistant", `Não consegui processar **${att.filename}**: ${msg}`, []);
               return false;
             }
             if (r && r.ok && r.sessionId) {
@@ -502,12 +474,7 @@ function ChatPage() {
               return true;
             }
             const reasonEx = (r && r.error) || "nenhum detalhe retornado";
-            const debugText = r?.debugText?.trim();
-            const safeDebugText = debugText?.replace(/```/g, "``\u200b`");
-            const msg = debugText
-              ? `Nenhum lançamento identificado no extrato.\n\n${reasonEx}\n\nTexto lido pela IA/OCR:\n\n\`\`\`text\n${safeDebugText}\n\`\`\``
-              : reasonEx;
-            await persistMessage(convId!, "assistant", msg, []);
+            await persistMessage(convId!, "assistant", `Nenhum lançamento identificado no extrato.\n\n${reasonEx}`, []);
             return false;
           }
           const r = await extractDoc({
