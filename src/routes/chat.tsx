@@ -212,12 +212,29 @@ function detectExtractorKind(
   return null;
 }
 
-function detectBankInText(text: string, accounts: { id: string; bank: string }[]): string | null {
+function detectBankInText(
+  text: string,
+  accounts: { id: string; bank: string; nickname?: string | null; account_number?: string | null }[],
+): string | null {
   const t = text.toLowerCase();
+  // 1) Match exato por apelido ou número da conta
   for (const acc of accounts) {
-    if (acc.bank && t.includes(acc.bank.toLowerCase())) return acc.id;
+    const nick = (acc.nickname ?? "").toLowerCase().trim();
+    if (nick && t.includes(nick)) return acc.id;
+    const num = (acc.account_number ?? "").toLowerCase().trim();
+    if (num && t.includes(num)) return acc.id;
   }
-  // Nomes/aliases comuns
+  // 2) Match exato pelo nome do banco da conta
+  for (const acc of accounts) {
+    const bankFull = (acc.bank ?? "").toLowerCase().trim();
+    if (bankFull && t.includes(bankFull)) return acc.id;
+  }
+  // 3) Match pela primeira palavra do banco (genérico)
+  for (const acc of accounts) {
+    const bankFirst = (acc.bank ?? "").toLowerCase().split(" ")[0];
+    if (bankFirst && bankFirst.length >= 2 && t.includes(bankFirst)) return acc.id;
+  }
+  // 4) Aliases comuns
   const bankNames: Record<string, string[]> = {
     safra: ["safra"],
     nubank: ["nubank", "nu "],
