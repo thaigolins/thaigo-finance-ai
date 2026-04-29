@@ -482,6 +482,25 @@ export const confirmStaging = createServerFn({ method: "POST" })
       })
       .eq("id", data.sessionId);
 
+    // Recalcula saldo da conta bancária quando há vínculo
+    if (accountId) {
+      const { data: allTxs } = await supabase
+        .from("bank_transactions")
+        .select("amount, kind")
+        .eq("bank_account_id", accountId)
+        .eq("user_id", userId);
+      if (allTxs) {
+        const newBalance = (allTxs as { amount: number; kind: string }[]).reduce((sum, tx) => {
+          return sum + (tx.kind === "income" ? Number(tx.amount) : -Number(tx.amount));
+        }, 0);
+        await supabase
+          .from("bank_accounts")
+          .update({ balance: newBalance })
+          .eq("id", accountId)
+          .eq("user_id", userId);
+      }
+    }
+
     await logAudit(supabase, {
       userId,
       action: pendingCount === 0 ? "confirm" : "partial_confirm",
