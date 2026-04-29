@@ -11,16 +11,14 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       throw new Response('Missing Supabase environment variables', { status: 500 });
     }
 
-    // Tenta pegar token do header Authorization OU do cookie sb-auth-token
     let token: string | null = null;
-    
     const request = getRequest();
+
     if (request?.headers) {
       const authHeader = request.headers.get('authorization');
       if (authHeader?.startsWith('Bearer ')) {
         token = authHeader.replace('Bearer ', '');
       }
-      // Fallback: cookie do Supabase
       if (!token) {
         const cookieHeader = request.headers.get('cookie') ?? '';
         const match = cookieHeader.match(/sb-[^=]+-auth-token=([^;]+)/);
@@ -38,20 +36,10 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       throw new Response('Unauthorized: No token found', { status: 401 });
     }
 
-    const supabase = createClient<Database>(
-      SUPABASE_URL,
-      SUPABASE_PUBLISHABLE_KEY,
-      {
-        global: {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-        auth: {
-          storage: undefined,
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      }
-    );
+    const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+    });
 
     const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError || !userData?.user) {
