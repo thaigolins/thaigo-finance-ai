@@ -895,9 +895,10 @@ function ChatPage() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-40"
                 onClick={() => fileRef.current?.click()}
-                title="Anexar fatura, extrato, FGTS, contrato ou contracheque"
+                disabled={!user}
+                title={user ? "Anexar fatura, extrato, FGTS, contrato ou contracheque" : "Faça login para anexar documentos"}
               >
                 <Paperclip className="h-4 w-4" strokeWidth={1.75} />
               </Button>
@@ -907,6 +908,7 @@ function ChatPage() {
                 accept="application/pdf,image/*"
                 multiple
                 hidden
+                disabled={!user}
                 onChange={(e) => handleFiles(e.target.files)}
               />
               <textarea
