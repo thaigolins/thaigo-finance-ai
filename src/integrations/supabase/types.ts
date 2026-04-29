@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_audit_logs: {
+        Row: {
+          action: Database["public"]["Enums"]["ai_audit_action"]
+          after_data: Json | null
+          before_data: Json | null
+          created_at: string
+          doc_kind: Database["public"]["Enums"]["pending_action_kind"] | null
+          id: string
+          message: string | null
+          pending_action_id: string | null
+          status: Database["public"]["Enums"]["ai_audit_status"]
+          user_id: string
+        }
+        Insert: {
+          action: Database["public"]["Enums"]["ai_audit_action"]
+          after_data?: Json | null
+          before_data?: Json | null
+          created_at?: string
+          doc_kind?: Database["public"]["Enums"]["pending_action_kind"] | null
+          id?: string
+          message?: string | null
+          pending_action_id?: string | null
+          status?: Database["public"]["Enums"]["ai_audit_status"]
+          user_id: string
+        }
+        Update: {
+          action?: Database["public"]["Enums"]["ai_audit_action"]
+          after_data?: Json | null
+          before_data?: Json | null
+          created_at?: string
+          doc_kind?: Database["public"]["Enums"]["pending_action_kind"] | null
+          id?: string
+          message?: string | null
+          pending_action_id?: string | null
+          status?: Database["public"]["Enums"]["ai_audit_status"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_conversations: {
         Row: {
           created_at: string
@@ -987,6 +1026,14 @@ export type Database = {
     }
     Enums: {
       account_type: "checking" | "savings" | "investment" | "salary" | "other"
+      ai_audit_action:
+        | "extract"
+        | "confirm"
+        | "discard"
+        | "duplicate_detected"
+        | "partial_confirm"
+        | "edit_before_confirm"
+      ai_audit_status: "success" | "error" | "warning"
       alert_severity: "info" | "warning" | "critical"
       app_role: "admin" | "user"
       card_brand: "visa" | "mastercard" | "amex" | "elo" | "hipercard" | "other"
@@ -1159,6 +1206,15 @@ export const Constants = {
   public: {
     Enums: {
       account_type: ["checking", "savings", "investment", "salary", "other"],
+      ai_audit_action: [
+        "extract",
+        "confirm",
+        "discard",
+        "duplicate_detected",
+        "partial_confirm",
+        "edit_before_confirm",
+      ],
+      ai_audit_status: ["success", "error", "warning"],
       alert_severity: ["info", "warning", "critical"],
       app_role: ["admin", "user"],
       card_brand: ["visa", "mastercard", "amex", "elo", "hipercard", "other"],
