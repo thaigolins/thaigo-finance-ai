@@ -331,16 +331,27 @@ export function PendingActionCard({
           <p className="mt-1.5 text-sm font-medium text-foreground">{action.summary}</p>
 
           {duplicates.length > 0 && !done && (
-            <div className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-2.5 text-[11px] text-amber-700 dark:text-amber-300">
-              <div className="font-medium">Já existe registro parecido:</div>
-              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            <div className="mt-2 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 text-[11px] text-amber-700 dark:text-amber-300">
+              <div className="flex items-center gap-1.5 text-[12px] font-semibold">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Atenção: já existe registro parecido no seu app
+              </div>
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
                 {duplicates.map((d, i) => <li key={i}>{d.reason}</li>)}
               </ul>
-              <div className="mt-1.5 text-amber-600/80 dark:text-amber-400/80">
-                Você ainda pode confirmar — mas verifique para evitar duplicar.
+              <div className="mt-2 text-amber-600/90 dark:text-amber-400/90">
+                Confirme apenas se for um documento <strong>diferente</strong> — caso contrário, descarte para evitar lançar duas vezes os mesmos dados.
               </div>
             </div>
           )}
+
+          {missingRequired.length > 0 && !done && (
+            <div className="mt-2 rounded-xl border border-destructive/40 bg-destructive/5 p-2.5 text-[11px] text-destructive">
+              <div className="font-medium">Campos obrigatórios em falta:</div>
+              <div className="mt-0.5">{missingRequired.join(", ")}</div>
+            </div>
+          )}
+
 
           {!done && (
             <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
