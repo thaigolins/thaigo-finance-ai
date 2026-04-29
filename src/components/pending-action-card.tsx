@@ -54,51 +54,63 @@ const fmtCurrency = (n: unknown) =>
 
 type Tx = Record<string, unknown>;
 
-// Campos editáveis por tipo (label + key + tipo)
-type EditField = { key: string; label: string; type: "text" | "number" | "date" | "month" };
+// Campos editáveis por tipo (label + key + tipo + obrigatório)
+type EditField = {
+  key: string;
+  label: string;
+  type: "text" | "number" | "date" | "month";
+  required?: boolean;
+};
 
 const editFieldsByKind: Record<PendingActionData["kind"], EditField[]> = {
   fatura: [
     { key: "card_brand", label: "Bandeira", type: "text" },
     { key: "card_last_digits", label: "Últimos 4 dígitos", type: "text" },
-    { key: "reference_month", label: "Mês ref.", type: "month" },
-    { key: "due_date", label: "Vencimento", type: "date" },
-    { key: "total_amount", label: "Total", type: "number" },
+    { key: "reference_month", label: "Mês ref.", type: "month", required: true },
+    { key: "due_date", label: "Vencimento", type: "date", required: true },
+    { key: "total_amount", label: "Total", type: "number", required: true },
   ],
   extrato: [
-    { key: "bank", label: "Banco", type: "text" },
+    { key: "bank", label: "Banco", type: "text", required: true },
     { key: "account_number", label: "Conta", type: "text" },
-    { key: "period_from", label: "Período de", type: "date" },
-    { key: "period_to", label: "Período até", type: "date" },
+    { key: "period_from", label: "Período de", type: "date", required: true },
+    { key: "period_to", label: "Período até", type: "date", required: true },
     { key: "closing_balance", label: "Saldo final", type: "number" },
   ],
   fgts: [
-    { key: "employer", label: "Empregador", type: "text" },
+    { key: "employer", label: "Empregador", type: "text", required: true },
     { key: "cnpj", label: "CNPJ", type: "text" },
     { key: "status", label: "Status (ativa/inativa)", type: "text" },
-    { key: "balance", label: "Saldo", type: "number" },
+    { key: "balance", label: "Saldo", type: "number", required: true },
     { key: "monthly_deposit", label: "Depósito mensal", type: "number" },
     { key: "jam_month", label: "JAM", type: "number" },
   ],
   emprestimo: [
-    { key: "institution", label: "Instituição", type: "text" },
+    { key: "institution", label: "Instituição", type: "text", required: true },
     { key: "debt_type", label: "Tipo", type: "text" },
-    { key: "current_balance", label: "Saldo devedor", type: "number" },
-    { key: "monthly_payment", label: "Parcela", type: "number" },
+    { key: "current_balance", label: "Saldo devedor", type: "number", required: true },
+    { key: "monthly_payment", label: "Parcela", type: "number", required: true },
     { key: "interest_rate", label: "Taxa %", type: "number" },
     { key: "cet", label: "CET %", type: "number" },
     { key: "status", label: "Status", type: "text" },
   ],
   contracheque: [
-    { key: "employer", label: "Empregador", type: "text" },
-    { key: "reference_month", label: "Mês ref.", type: "month" },
-    { key: "gross_amount", label: "Bruto", type: "number" },
-    { key: "net_amount", label: "Líquido", type: "number" },
+    { key: "employer", label: "Empregador", type: "text", required: true },
+    { key: "reference_month", label: "Mês ref.", type: "month", required: true },
+    { key: "gross_amount", label: "Bruto", type: "number", required: true },
+    { key: "net_amount", label: "Líquido", type: "number", required: true },
     { key: "inss", label: "INSS", type: "number" },
     { key: "irrf", label: "IRRF", type: "number" },
     { key: "fgts_amount", label: "FGTS", type: "number" },
   ],
 };
+
+function isEmptyValue(v: unknown): boolean {
+  if (v == null) return true;
+  if (typeof v === "string") return v.trim() === "";
+  if (typeof v === "number") return !Number.isFinite(v) || v === 0;
+  return false;
+}
 
 function toInputValue(v: unknown, type: EditField["type"]): string {
   if (v == null) return "";
