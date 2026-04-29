@@ -33,6 +33,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { uploadFile, type StorageBucket } from "@/lib/storage";
 import { useUserList, useUserInsert, useUserDelete, useInvalidate } from "@/lib/queries";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { extractDocument } from "@/server/document-extraction.functions";
+import { PendingActionCard, type PendingActionData } from "@/components/pending-action-card";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({
