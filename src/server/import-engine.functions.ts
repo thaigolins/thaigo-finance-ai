@@ -154,7 +154,7 @@ export const startImport = createServerFn({ method: "POST" })
         .update({ status: "failed", errors: allErrors.length > 0 ? allErrors : [detail] })
         .eq("id", sessionId);
       console.error("[startImport] step=no_transactions", { detail });
-      return { ok: false as const, error: `DEBUG v2 import-engine/no_transactions: ${detail}`, sessionId };
+      return { ok: false as const, error: `Não foi possível extrair lançamentos: ${detail}`, sessionId };
     }
 
     // 5) Anti-duplicidade
@@ -202,7 +202,7 @@ export const startImport = createServerFn({ method: "POST" })
           .from("import_sessions")
           .update({ status: "failed", errors: [ins.error.message] })
           .eq("id", sessionId);
-        return { ok: false as const, error: `DEBUG v2 import-engine/staging_insert: ${ins.error.message}`, sessionId };
+        return { ok: false as const, error: `Falha ao gravar staging: ${ins.error.message}`, sessionId };
       }
       console.log("[startImport] step=staging_inserted", { count: rows.length });
     }
