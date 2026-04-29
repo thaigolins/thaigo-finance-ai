@@ -27,14 +27,6 @@ const initialMessages: Message[] = [
   },
 ];
 
-const suggestions = [
-  { icon: TrendingUp, label: "Análise de portfólio", desc: "Como está minha carteira este mês?" },
-  { icon: Receipt, label: "Gastos por categoria", desc: "Detalhe minhas despesas de abril" },
-  { icon: PiggyBank, label: "Reserva de emergência", desc: "Quanto falta para minha meta?" },
-  { icon: Lightbulb, label: "Otimização", desc: "Quais assinaturas posso cortar?" },
-  { icon: Landmark, label: "Atualizar dívidas", desc: "Segue extrato do empréstimo, atualize minhas dívidas" },
-  { icon: Banknote, label: "Atualizar FGTS", desc: "Segue extrato do FGTS, atualize meu saldo" },
-];
 
 function smartReply(text: string): string {
   const t = text.toLowerCase();
