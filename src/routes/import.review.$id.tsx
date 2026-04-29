@@ -138,8 +138,7 @@ function ReviewPage() {
         setBankAccountId(sess.bank_account_id);
       } else if (sess.bank_hint) {
         const hint = sess.bank_hint.toLowerCase();
-        const accs = (r.accounts as { id: string; bank: string }[] | undefined)
-          ?? [];
+        const accs = accounts;
         const matched = accs.find((a) => a.bank?.toLowerCase().includes(hint));
         if (matched) setBankAccountId(matched.id);
         else setBankAccountId(null);
