@@ -34,7 +34,7 @@ import { uploadFile, type StorageBucket } from "@/lib/storage";
 import { useUserList, useUserInsert, useUserDelete, useInvalidate } from "@/lib/queries";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { extractDocument } from "@/server/document-extraction.functions";
-import { startImport, listSession } from "@/server/import-engine.functions";
+import { listSession } from "@/server/import-engine.functions";
 import { PendingActionCard, type PendingActionData } from "@/components/pending-action-card";
 import { ImportSessionCard, type ImportSessionSummary } from "@/components/import-session-card";
 
@@ -218,7 +218,6 @@ function ChatPage() {
   const { user } = useAuth();
   const aiChat = useServerFn(aiFinancialChat);
   const extractDoc = useServerFn(extractDocument);
-  const startImportFn = useServerFn(startImport);
   const listSessionFn = useServerFn(listSession);
   const qc = useQueryClient();
   const invalidateConvs = useInvalidate("ai_conversations");
@@ -405,28 +404,47 @@ function ChatPage() {
               );
               return false;
             }
-            let r: any;
+            let r: { ok: boolean; sessionId?: string; error?: string } | null = null;
             try {
-              r = await startImportFn({
-                data: {
-                  bucket: att.bucket as "invoices" | "bank-statements" | "payslips" | "fgts-statements" | "loan-contracts" | "images",
+              const { data: sessData } = await supabase.auth.getSession();
+              const token = sessData.session?.access_token;
+              if (!token) {
+                await persistMessage(
+                  convId!,
+                  "assistant",
+                  `Sessão expirada. Faça login novamente.`,
+                  [],
+                );
+                return false;
+              }
+              const resp = await fetch("/api/import/extrato", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  bucket: att.bucket,
                   path: att.path,
                   filename: att.filename,
                   mime: att.mime || (att.bucket === "images" ? "image/jpeg" : "application/pdf"),
-                  kind: "extrato",
                   uploadedFileId: uploadedFileId ?? undefined,
                   conversationId: convId!,
-                },
+                }),
               });
-              console.log("[chat] startImport response", r, "typeof=", typeof r, "keys=", r && Object.keys(r));
+              const text = await resp.text();
+              try {
+                r = text ? JSON.parse(text) : null;
+              } catch {
+                r = { ok: false, error: `Resposta não-JSON do servidor (HTTP ${resp.status}): ${text.slice(0, 300)}` };
+              }
+              console.log("[chat] /api/import/extrato response", { status: resp.status, body: r });
+              if (!resp.ok && r?.ok !== false) {
+                r = { ok: false, error: r?.error ?? `HTTP ${resp.status}` };
+              }
             } catch (thrown: any) {
-              console.error("[chat] startImport THREW", thrown);
-              // useServerFn lança quando o servidor responde com erro HTTP (ex.: 401 do middleware de auth)
-              const status = thrown?.status ?? thrown?.response?.status;
-              const isAuth = status === 401 || /unauthor|not authenticated|jwt/i.test(String(thrown?.message ?? ""));
-              const msg = isAuth
-                ? `Sessão expirada. Faça login novamente.`
-                : (thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : JSON.stringify(thrown));
+              console.error("[chat] /api/import/extrato THREW", thrown);
+              const msg = thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : String(thrown);
               await persistMessage(
                 convId!,
                 "assistant",
