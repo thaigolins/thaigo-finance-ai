@@ -309,6 +309,22 @@ export const listSession = createServerFn({ method: "POST" })
     return { ok: true as const, session: sess.data, transactions: txs.data ?? [] };
   });
 
+// Helper: build authenticated supabase client + userId from a token in payload.
+async function authFromToken(token: string) {
+  const SUPABASE_URL = process.env.SUPABASE_URL!;
+  const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase: any = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+  });
+  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !userData?.user) {
+    return { ok: false as const, error: "Sessão inválida." };
+  }
+  return { ok: true as const, supabase, userId: userData.user.id as string };
+}
+
 const PatchSchema = z.object({
   occurred_at: z.string().nullish(),
   description: z.string().max(500).optional(),
@@ -321,6 +337,7 @@ const PatchSchema = z.object({
 const UpdateInput = z.object({
   id: z.string().uuid(),
   patch: PatchSchema,
+  token: z.string().min(1),
 });
 
 export const updateStagingTx = createServerFn({ method: "POST" })
