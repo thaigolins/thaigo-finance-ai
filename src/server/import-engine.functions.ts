@@ -154,7 +154,7 @@ export const startImport = createServerFn({ method: "POST" })
         .update({ status: "failed", errors: allErrors.length > 0 ? allErrors : [detail] })
         .eq("id", sessionId);
       console.error("[startImport] step=no_transactions", { detail });
-      return { ok: false as const, error: `Falha ao processar extrato: ${detail}`, sessionId };
+      return { ok: false as const, error: `DEBUG v2 import-engine/no_transactions: ${detail}`, sessionId };
     }
 
     // 5) Anti-duplicidade
@@ -197,12 +197,14 @@ export const startImport = createServerFn({ method: "POST" })
       });
       const ins = await supabase.from("import_staging_transactions").insert(rows);
       if (ins.error) {
+        console.error("[startImport] step=staging_insert FAILED", ins.error);
         await supabase
           .from("import_sessions")
           .update({ status: "failed", errors: [ins.error.message] })
           .eq("id", sessionId);
-        return { ok: false as const, error: `Falha ao salvar lançamentos: ${ins.error.message}`, sessionId };
+        return { ok: false as const, error: `DEBUG v2 import-engine/staging_insert: ${ins.error.message}`, sessionId };
       }
+      console.log("[startImport] step=staging_inserted", { count: rows.length });
     }
 
     // 8) Atualiza sessão
@@ -227,7 +229,8 @@ export const startImport = createServerFn({ method: "POST" })
         raw_extraction: (result.raw ?? null) as unknown as Record<string, unknown> | null,
       })
       .eq("id", sessionId);
-    if (update.error) console.error("session update", update.error);
+    if (update.error) console.error("[startImport] step=session_update FAILED", update.error);
+    else console.log("[startImport] step=session_ready_for_review", { sessionId, totalCount: valid.length });
 
     await logAudit(supabase, {
       userId,
