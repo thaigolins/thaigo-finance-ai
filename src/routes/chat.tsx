@@ -614,6 +614,9 @@ function ChatPage() {
                           ))}
                         </div>
                       )}
+                      {m.metadata?.pendingAction && (
+                        <PendingActionCard action={m.metadata.pendingAction} />
+                      )}
                     </div>
                   </div>
                 );
