@@ -117,8 +117,7 @@ async function loadSnapshot(supabase: any): Promise<FinancialSnapshot> {
     year: "numeric",
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb = supabase as any;
+  const sb = supabase;
 
   const [
     accountsRes,
