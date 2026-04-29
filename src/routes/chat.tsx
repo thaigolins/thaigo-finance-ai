@@ -52,7 +52,10 @@ type Message = {
   role: "user" | "assistant" | "system";
   content: string;
   created_at: string;
-  metadata: { attachments?: AttachmentMeta[] } | null;
+  metadata: {
+    attachments?: AttachmentMeta[];
+    pendingAction?: PendingActionData;
+  } | null;
 };
 type AttachmentMeta = {
   filename: string;
