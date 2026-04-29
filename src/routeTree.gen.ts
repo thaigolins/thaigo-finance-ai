@@ -9,8 +9,62 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RelatoriosRouteImport } from './routes/relatorios'
+import { Route as RecorrentesRouteImport } from './routes/recorrentes'
+import { Route as MetasRouteImport } from './routes/metas'
+import { Route as InvestimentosRouteImport } from './routes/investimentos'
+import { Route as FinanceiroRouteImport } from './routes/financeiro'
+import { Route as FaturasRouteImport } from './routes/faturas'
+import { Route as ExtratosRouteImport } from './routes/extratos'
+import { Route as ChatRouteImport } from './routes/chat'
+import { Route as CartoesRouteImport } from './routes/cartoes'
 import { Route as IndexRouteImport } from './routes/index'
 
+const RelatoriosRoute = RelatoriosRouteImport.update({
+  id: '/relatorios',
+  path: '/relatorios',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecorrentesRoute = RecorrentesRouteImport.update({
+  id: '/recorrentes',
+  path: '/recorrentes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MetasRoute = MetasRouteImport.update({
+  id: '/metas',
+  path: '/metas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvestimentosRoute = InvestimentosRouteImport.update({
+  id: '/investimentos',
+  path: '/investimentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FinanceiroRoute = FinanceiroRouteImport.update({
+  id: '/financeiro',
+  path: '/financeiro',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FaturasRoute = FaturasRouteImport.update({
+  id: '/faturas',
+  path: '/faturas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExtratosRoute = ExtratosRouteImport.update({
+  id: '/extratos',
+  path: '/extratos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChatRoute = ChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CartoesRoute = CartoesRouteImport.update({
+  id: '/cartoes',
+  path: '/cartoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +73,158 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/cartoes': typeof CartoesRoute
+  '/chat': typeof ChatRoute
+  '/extratos': typeof ExtratosRoute
+  '/faturas': typeof FaturasRoute
+  '/financeiro': typeof FinanceiroRoute
+  '/investimentos': typeof InvestimentosRoute
+  '/metas': typeof MetasRoute
+  '/recorrentes': typeof RecorrentesRoute
+  '/relatorios': typeof RelatoriosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/cartoes': typeof CartoesRoute
+  '/chat': typeof ChatRoute
+  '/extratos': typeof ExtratosRoute
+  '/faturas': typeof FaturasRoute
+  '/financeiro': typeof FinanceiroRoute
+  '/investimentos': typeof InvestimentosRoute
+  '/metas': typeof MetasRoute
+  '/recorrentes': typeof RecorrentesRoute
+  '/relatorios': typeof RelatoriosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/cartoes': typeof CartoesRoute
+  '/chat': typeof ChatRoute
+  '/extratos': typeof ExtratosRoute
+  '/faturas': typeof FaturasRoute
+  '/financeiro': typeof FinanceiroRoute
+  '/investimentos': typeof InvestimentosRoute
+  '/metas': typeof MetasRoute
+  '/recorrentes': typeof RecorrentesRoute
+  '/relatorios': typeof RelatoriosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/cartoes'
+    | '/chat'
+    | '/extratos'
+    | '/faturas'
+    | '/financeiro'
+    | '/investimentos'
+    | '/metas'
+    | '/recorrentes'
+    | '/relatorios'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/cartoes'
+    | '/chat'
+    | '/extratos'
+    | '/faturas'
+    | '/financeiro'
+    | '/investimentos'
+    | '/metas'
+    | '/recorrentes'
+    | '/relatorios'
+  id:
+    | '__root__'
+    | '/'
+    | '/cartoes'
+    | '/chat'
+    | '/extratos'
+    | '/faturas'
+    | '/financeiro'
+    | '/investimentos'
+    | '/metas'
+    | '/recorrentes'
+    | '/relatorios'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CartoesRoute: typeof CartoesRoute
+  ChatRoute: typeof ChatRoute
+  ExtratosRoute: typeof ExtratosRoute
+  FaturasRoute: typeof FaturasRoute
+  FinanceiroRoute: typeof FinanceiroRoute
+  InvestimentosRoute: typeof InvestimentosRoute
+  MetasRoute: typeof MetasRoute
+  RecorrentesRoute: typeof RecorrentesRoute
+  RelatoriosRoute: typeof RelatoriosRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/relatorios': {
+      id: '/relatorios'
+      path: '/relatorios'
+      fullPath: '/relatorios'
+      preLoaderRoute: typeof RelatoriosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recorrentes': {
+      id: '/recorrentes'
+      path: '/recorrentes'
+      fullPath: '/recorrentes'
+      preLoaderRoute: typeof RecorrentesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/metas': {
+      id: '/metas'
+      path: '/metas'
+      fullPath: '/metas'
+      preLoaderRoute: typeof MetasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/investimentos': {
+      id: '/investimentos'
+      path: '/investimentos'
+      fullPath: '/investimentos'
+      preLoaderRoute: typeof InvestimentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/financeiro': {
+      id: '/financeiro'
+      path: '/financeiro'
+      fullPath: '/financeiro'
+      preLoaderRoute: typeof FinanceiroRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/faturas': {
+      id: '/faturas'
+      path: '/faturas'
+      fullPath: '/faturas'
+      preLoaderRoute: typeof FaturasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/extratos': {
+      id: '/extratos'
+      path: '/extratos'
+      fullPath: '/extratos'
+      preLoaderRoute: typeof ExtratosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chat': {
+      id: '/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof ChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cartoes': {
+      id: '/cartoes'
+      path: '/cartoes'
+      fullPath: '/cartoes'
+      preLoaderRoute: typeof CartoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +237,15 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CartoesRoute: CartoesRoute,
+  ChatRoute: ChatRoute,
+  ExtratosRoute: ExtratosRoute,
+  FaturasRoute: FaturasRoute,
+  FinanceiroRoute: FinanceiroRoute,
+  InvestimentosRoute: InvestimentosRoute,
+  MetasRoute: MetasRoute,
+  RecorrentesRoute: RecorrentesRoute,
+  RelatoriosRoute: RelatoriosRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
