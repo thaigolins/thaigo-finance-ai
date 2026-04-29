@@ -395,6 +395,15 @@ function ChatPage() {
         try {
           // Extrato bancário usa o motor novo (documentImportEngine).
           if (ek === "extrato") {
+            if (!user) {
+              await persistMessage(
+                convId!,
+                "assistant",
+                `Você precisa estar autenticado para importar extratos. Faça login e tente novamente.`,
+                [],
+              );
+              return false;
+            }
             let r: any;
             try {
               r = await startImportFn({
@@ -409,13 +418,18 @@ function ChatPage() {
                 },
               });
               console.log("[chat] startImport response", r, "typeof=", typeof r, "keys=", r && Object.keys(r));
-            } catch (thrown) {
+            } catch (thrown: any) {
               console.error("[chat] startImport THREW", thrown);
-              const msg = thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : JSON.stringify(thrown);
+              // useServerFn lança quando o servidor responde com erro HTTP (ex.: 401 do middleware de auth)
+              const status = thrown?.status ?? thrown?.response?.status;
+              const isAuth = status === 401 || /unauthor|not authenticated|jwt/i.test(String(thrown?.message ?? ""));
+              const msg = isAuth
+                ? `Sessão expirada ou inválida (HTTP 401). Faça login novamente.`
+                : (thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : JSON.stringify(thrown));
               await persistMessage(
                 convId!,
                 "assistant",
-                `DEBUG v3 · startImport lançou exceção: ${msg}`,
+                `Não consegui processar **${att.filename}**: ${msg}`,
                 [],
               );
               return false;
