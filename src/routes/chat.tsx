@@ -424,7 +424,7 @@ function ChatPage() {
               const status = thrown?.status ?? thrown?.response?.status;
               const isAuth = status === 401 || /unauthor|not authenticated|jwt/i.test(String(thrown?.message ?? ""));
               const msg = isAuth
-                ? `Sessão expirada ou inválida (HTTP 401). Faça login novamente.`
+                ? `Sessão expirada. Faça login novamente.`
                 : (thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : JSON.stringify(thrown));
               await persistMessage(
                 convId!,
@@ -451,14 +451,13 @@ function ChatPage() {
               });
               return true;
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const reasonEx =
               (r && (r.error || r.message)) ||
-              `DEBUG v3: startImport retornou ${r === undefined ? "undefined" : r === null ? "null" : JSON.stringify(r).slice(0, 300)}`;
+              "Não foi possível extrair os lançamentos.";
             await persistMessage(
               convId!,
               "assistant",
-              `DEBUG v3 · Não consegui extrair os dados de **${att.filename}**. Motivo real: ${reasonEx}`,
+              `Não consegui extrair os dados de **${att.filename}**. Motivo: ${reasonEx}`,
               [],
             );
             return false;
@@ -504,11 +503,16 @@ function ChatPage() {
         } catch (err) {
           console.error("extract error", err);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const reason = (err as any)?.message || String(err) || "DEBUG v2: erro sem message no catch";
+          const e = err as any;
+          const status = e?.status ?? e?.response?.status;
+          const isAuth = status === 401 || /unauthor|not authenticated|jwt/i.test(String(e?.message ?? ""));
+          const reason = isAuth
+            ? "Sessão expirada. Faça login novamente."
+            : (e?.message || String(err) || "erro desconhecido");
           await persistMessage(
             convId!,
             "assistant",
-            `DEBUG v2 · Falha ao processar **${att.filename}** com IA. Motivo real: ${reason}`,
+            `Falha ao processar **${att.filename}**: ${reason}`,
             [],
           );
           return false;
@@ -628,6 +632,11 @@ function ChatPage() {
 
   const handleFiles = (list: FileList | null) => {
     if (!list) return;
+    if (!user) {
+      toast.error("Faça login para anexar documentos.");
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
     const next = Array.from(list);
     setPending((p) => [...p, ...next]);
     if (fileRef.current) fileRef.current.value = "";
@@ -731,19 +740,27 @@ function ChatPage() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/30 bg-emerald-soft">
                   <Sparkles className="h-4 w-4 text-primary" strokeWidth={2} />
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-success" />
+                <span className={cn(
+                  "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card",
+                  user ? "bg-success" : "bg-destructive",
+                )} />
               </div>
               <div>
                 <p className="text-sm font-semibold tracking-tight">
                   {activeConv?.title ?? "Thaigo AI · Private"}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  Conectado · Análise em tempo real
+                  {user ? "Conectado · Análise em tempo real" : "Não autenticado · faça login para usar"}
                 </p>
               </div>
             </div>
-            <span className="rounded-full border border-border/40 bg-muted/20 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              GPT · Financeiro
+            <span className={cn(
+              "rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider",
+              user
+                ? "border-border/40 bg-muted/20 text-muted-foreground"
+                : "border-destructive/40 bg-destructive/10 text-destructive",
+            )}>
+              {user ? "GPT · Financeiro" : "Sessão ausente"}
             </span>
           </div>
 
@@ -812,7 +829,7 @@ function ChatPage() {
             )}
             {processingAttachment && (
               <div className="flex items-center gap-2 rounded-xl border border-primary/30 bg-emerald-soft px-3 py-2 text-xs text-primary">
-                <Loader2 className="h-3 w-3 animate-spin" /> DEBUG v2 · Processando anexo com IA...
+                <Loader2 className="h-3 w-3 animate-spin" /> Processando anexo com IA...
               </div>
             )}
             {sending && !processingAttachment && (
@@ -883,9 +900,10 @@ function ChatPage() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-40"
                 onClick={() => fileRef.current?.click()}
-                title="Anexar fatura, extrato, FGTS, contrato ou contracheque"
+                disabled={!user}
+                title={user ? "Anexar fatura, extrato, FGTS, contrato ou contracheque" : "Faça login para anexar documentos"}
               >
                 <Paperclip className="h-4 w-4" strokeWidth={1.75} />
               </Button>
@@ -895,6 +913,7 @@ function ChatPage() {
                 accept="application/pdf,image/*"
                 multiple
                 hidden
+                disabled={!user}
                 onChange={(e) => handleFiles(e.target.files)}
               />
               <textarea
