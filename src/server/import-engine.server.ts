@@ -343,7 +343,7 @@ export function parseExtratoFromText(text: string): RawTx[] {
   return txs;
 }
 
-function normalizeAiTransactions(parsed: unknown, model: string): ExtractionResult | null {
+function normalizeAiTransactions(parsed: unknown, model: string, rawContent: string): ExtractionResult | null {
   if (!parsed || typeof parsed !== "object") return null;
   const p = parsed as Record<string, unknown>;
   const txsRaw = Array.isArray(p.transactions) ? (p.transactions as unknown[]) : [];
@@ -374,7 +374,7 @@ function normalizeAiTransactions(parsed: unknown, model: string): ExtractionResu
     closing_balance: typeof p.closing_balance === "number" ? p.closing_balance : null,
     transactions,
     errors: Array.isArray(p.errors) ? (p.errors as string[]) : [],
-    raw: { vision_json: parsed },
+    raw: { vision_json: parsed, vision_raw: rawContent, ai_raw: { [model]: rawContent } },
   };
 }
 
@@ -419,6 +419,7 @@ export async function extractBankStatementHybridFromImage(opts: {
   ];
 
   const errorsCollected: string[] = [];
+  const aiRawByModel: Record<string, string> = {};
   const tryVisionJson = async (model: string): Promise<ExtractionResult | null> => {
     let content: string;
     try {
@@ -429,8 +430,10 @@ export async function extractBankStatementHybridFromImage(opts: {
       errorsCollected.push(msg);
       return null;
     }
+    aiRawByModel[model] = content;
+    console.log("[IMPORT_DEBUG] AI_RAW", { model, content });
     const parsed = safeParseJson(content);
-    const normalized = normalizeAiTransactions(parsed, model);
+    const normalized = normalizeAiTransactions(parsed, model, content);
     if (!normalized) {
       const preview = content.slice(0, 500).replace(/\s+/g, " ");
       const msg = `${model}: parse JSON falhou (len=${content.length}, preview 500ch: ${preview})`;
@@ -458,8 +461,11 @@ export async function extractBankStatementHybridFromImage(opts: {
 
   // B) OCR livre obrigatório + C) parser determinístico brasileiro sobre o OCR.
   let ocrText = "";
+  let ocrFallbackRaw = "";
   try {
-    ocrText = await ocrFreeText({ base64, mime, apiKey });
+    ocrFallbackRaw = await ocrFreeText({ base64, mime, apiKey });
+    ocrText = ocrFallbackRaw;
+    console.log("[IMPORT_DEBUG] OCR_TEXT", ocrText);
     console.log("[import-engine] OCR bruto", { len: ocrText.length, preview: ocrText.slice(0, 500) });
   } catch (e) {
     const msg = `OCR livre falhou: ${e instanceof Error ? e.message : String(e)}`;
@@ -467,8 +473,11 @@ export async function extractBankStatementHybridFromImage(opts: {
     errorsCollected.push(msg);
   }
 
-  if (ocrText.trim().length > 0) {
-    const parserTxs = parseExtratoFromText(ocrText);
+  const deterministicText = [ocrText, ...Object.values(aiRawByModel)].filter((s) => s.trim().length > 0).join("\n\n--- AI_RAW ---\n\n");
+
+  if (deterministicText.trim().length > 0) {
+    const parserTxs = parseExtratoFromText(deterministicText);
+    console.log("[IMPORT_DEBUG] REGEX_TXS", parserTxs);
     console.log("[import-engine] parser brasileiro", { extracted: parserTxs.length, total_count: parserTxs.length });
     if (parserTxs.length > 0) {
       return {
@@ -483,12 +492,15 @@ export async function extractBankStatementHybridFromImage(opts: {
         raw: {
           ...(typeof result?.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
           ocr_text: ocrText,
+          ocr_fallback_raw: ocrFallbackRaw,
+          ai_raw: aiRawByModel,
           parser_count: parserTxs.length,
+          regex_count: parserTxs.length,
         },
       };
     }
     errorsCollected.push(
-      `OCR retornou texto, mas o parser identificou 0 lançamentos. OCR preview: ${ocrText.slice(0, 500)}`,
+      `OCR/raw retornou texto, mas o parser identificou 0 lançamentos. OCR preview: ${ocrText.slice(0, 500)}`,
     );
     console.error("[import-engine] parser brasileiro ERROS", {
       parser_count: 0,
@@ -501,7 +513,10 @@ export async function extractBankStatementHybridFromImage(opts: {
       raw: {
         ...(typeof result?.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
         ocr_text: ocrText,
+        ocr_fallback_raw: ocrFallbackRaw,
+        ai_raw: aiRawByModel,
         parser_count: 0,
+        regex_count: 0,
         parser_errors: errorsCollected,
       },
     };
@@ -518,7 +533,10 @@ export async function extractBankStatementHybridFromImage(opts: {
         : ["A IA não conseguiu estruturar este documento. Tente um print mais legível."],
       raw: {
         ocr_text: ocrText,
+        ocr_fallback_raw: ocrFallbackRaw,
+        ai_raw: aiRawByModel,
         parser_count: 0,
+        regex_count: 0,
         parser_errors: errorsCollected,
       },
     };
@@ -531,7 +549,10 @@ export async function extractBankStatementHybridFromImage(opts: {
       raw: {
         ...(typeof result.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
         ocr_text: ocrText,
+        ocr_fallback_raw: ocrFallbackRaw,
+        ai_raw: aiRawByModel,
         parser_count: 0,
+        regex_count: 0,
       },
     };
   }
