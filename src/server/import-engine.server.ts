@@ -547,7 +547,6 @@ export async function extractBankStatementHybridFromImage(opts: {
     },
   };
 }
-}
 
 export async function extractBankStatementFromImage(opts: {
   fileBytes: Uint8Array;
