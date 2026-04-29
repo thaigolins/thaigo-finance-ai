@@ -304,7 +304,14 @@ export const extractDocument = createServerFn({ method: "POST" })
       pendingId: (insert.data as { id: string }).id,
       kind: data.kind,
       summary,
-      payload,
+      payload: payload as Record<string, unknown> & { [k: string]: unknown },
+    } as {
+      ok: true;
+      pendingId: string;
+      kind: Kind;
+      summary: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      payload: Record<string, any>;
     };
   });
 
