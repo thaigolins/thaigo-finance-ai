@@ -261,7 +261,8 @@ function ChatPage() {
       user_id: user.id,
       role,
       content,
-      metadata,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      metadata: metadata as any,
     });
     if (error) throw error;
     // Toca updated_at da conversa
