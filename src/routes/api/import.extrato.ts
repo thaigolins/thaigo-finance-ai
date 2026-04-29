@@ -123,12 +123,18 @@ export const Route = createFileRoute("/api/import/extrato")({
         const allErrors = [...result.errors, ...vErrors];
 
         if (valid.length === 0) {
-          const detail = allErrors.length > 0 ? allErrors.join(" | ") : "IA não retornou nenhum lançamento.";
+          const detail = allErrors.length > 0 ? allErrors.join(" | ") : "IA e OCR não retornaram lançamentos.";
+          console.error("[/api/import/extrato] NENHUM LANÇAMENTO", { sessionId, allErrors, raw: result.raw });
           await supabase
             .from("import_sessions")
-            .update({ status: "failed", errors: allErrors.length > 0 ? allErrors : [detail] })
+            .update({
+              status: "failed",
+              errors: allErrors.length > 0 ? allErrors : [detail],
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              raw_extraction: (result.raw ?? null) as any,
+            })
             .eq("id", sessionId);
-          return json({ ok: false, error: `Não foi possível extrair lançamentos: ${detail}` }, 200);
+          return json({ ok: false, error: `Nenhum lançamento identificado. ${detail}` }, 200);
         }
 
         const dupes = await detectDuplicates({
