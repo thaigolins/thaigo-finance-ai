@@ -305,7 +305,15 @@ function ReviewPage() {
                     {fmt(Number(session.net_amount))}
                   </p>
                 </div>
-                {session.duplicate_count > 0 && (
+                {session.duplicate_count > 0 && session.duplicate_count >= txs.length && txs.length > 0 ? (
+                  <div className="sm:col-span-4 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      Todos os lançamentos deste extrato já foram importados anteriormente.
+                      Se quiser reimportar, marque <strong>"Permitir duplicatas"</strong> abaixo.
+                    </span>
+                  </div>
+                ) : session.duplicate_count > 0 && (
                   <div className="sm:col-span-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
                     <AlertTriangle className="h-3.5 w-3.5" />
                     {session.duplicate_count} possível(eis) duplicata(s) detectada(s) com lançamentos já existentes.
@@ -494,6 +502,12 @@ function ReviewPage() {
                                 t.kind === "income" ? "text-success" : "text-destructive",
                               )}
                             />
+                            <p className={cn(
+                              "mt-0.5 text-[10px] font-medium",
+                              t.kind === "income" ? "text-success" : "text-destructive",
+                            )}>
+                              {t.kind === "income" ? "+" : "-"}R$ {Number(t.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
                           </TableCell>
                           <TableCell>
                             {t.status === "confirmed" ? (
