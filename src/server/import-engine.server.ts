@@ -218,7 +218,7 @@ function isLikelyHeaderOrBalance(line: string): boolean {
 }
 
 const AMOUNT_RE_GLOBAL = /(-?\s*R?\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})/g;
-const DATE_INLINE_RE = /\b(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{1,2}\s+(?:de\s+)?[a-zç]{3,}\.?(?:\s+(?:de\s+)?\d{2,4})?)\b/i;
+const DATE_INLINE_RE = /\b(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{1,2}\s+(?:de\s+)?[a-zç]{3,}\.?(?:\s*[-–]\s*\d{2,4}|\s+(?:de\s+)?\d{2,4})?)\b/i;
 
 function parseExtratoFromText(text: string): RawTx[] {
   const txs: RawTx[] = [];
