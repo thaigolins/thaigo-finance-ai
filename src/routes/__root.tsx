@@ -86,10 +86,15 @@ function AuthGate() {
   const isAuthRoute = pathname === "/auth";
 
   useEffect(() => {
-    if (!loading && !session && !isAuthRoute) {
-      navigate({ to: "/auth" });
+    if (loading) return;
+    if (!session && !isAuthRoute) {
+      console.log("[guard] no session on protected route", pathname, "→ /auth");
+      navigate({ to: "/auth", replace: true });
+    } else if (session && isAuthRoute) {
+      console.log("[guard] session active on /auth → /");
+      navigate({ to: "/", replace: true });
     }
-  }, [session, loading, isAuthRoute, navigate]);
+  }, [session, loading, isAuthRoute, pathname, navigate]);
 
   if (loading) {
     return (

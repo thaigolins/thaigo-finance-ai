@@ -22,11 +22,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // CRITICAL: subscribe BEFORE getSession()
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      console.log("[auth] onAuthStateChange:", event, "user:", s?.user?.email ?? null);
       setSession(s);
       setLoading(false);
     });
     supabase.auth.getSession().then(({ data }) => {
+      console.log("[auth] getSession restored:", data.session?.user?.email ?? "none");
       setSession(data.session);
       setLoading(false);
     });
@@ -34,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
+    console.log("[auth] signOut requested");
     await supabase.auth.signOut();
     setSession(null);
     if (typeof window !== "undefined") {

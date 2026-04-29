@@ -29,26 +29,32 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && session) navigate({ to: "/" });
+    if (!loading && session) {
+      console.log("[auth-page] session detected → redirect /");
+      navigate({ to: "/", replace: true });
+    }
   }, [session, loading, navigate]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    console.log("[auth-page] signInWithPassword:", email);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (error) {
+      console.warn("[auth-page] sign-in error:", error.message);
       toast.error(error.message);
       return;
     }
+    console.log("[auth-page] sign-in success, session:", data.session?.user?.email);
     toast.success("Bem-vindo de volta.");
-    navigate({ to: "/" });
+    // Do NOT navigate here — AuthGate + onAuthStateChange will handle the redirect.
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -58,10 +64,17 @@ function AuthPage() {
     });
     setBusy(false);
     if (error) {
+      console.warn("[auth-page] sign-up error:", error.message);
       toast.error(error.message);
       return;
     }
-    toast.success("Conta criada. Verifique seu e-mail para ativar.");
+    if (data.session) {
+      console.log("[auth-page] sign-up auto-login success");
+      toast.success("Conta criada com sucesso.");
+    } else {
+      console.log("[auth-page] sign-up requires email confirmation");
+      toast.success("Conta criada. Verifique seu e-mail para ativar.");
+    }
   };
 
   const handleOAuth = async (provider: "google" | "apple") => {
@@ -75,7 +88,7 @@ function AuthPage() {
       return;
     }
     if (result.redirected) return;
-    navigate({ to: "/" });
+    // session will arrive via onAuthStateChange; AuthGate handles redirect
   };
 
   return (
