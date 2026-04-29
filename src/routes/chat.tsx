@@ -304,7 +304,7 @@ function ChatPage() {
       invalidateMessages();
       invalidateConvs();
 
-      // Detecta exportação de PDF
+      // Detecta exportação de PDF (caminho rápido determinístico)
       const exportReq = detectExport(text);
       let replyContent: string;
       if (exportReq) {
@@ -316,11 +316,33 @@ function ChatPage() {
             : "Simples (operacional, direto ao ponto)";
         replyContent = `Perfeito. Estou gerando seu **PDF ${exportReq.kind === "private" ? "Private" : "Simples"}** do módulo **${exportReq.module}** para **${exportReq.period}**${exportReq.filters.length ? ` com filtros: ${exportReq.filters.join(", ")}` : ""}.\n\nFormato: ${tipo}.\n\nO download começará em instantes.`;
       } else {
-        replyContent = smartReply(text, attachments);
+        // Chama IA real via server function (usa Lovable AI Gateway no backend)
+        try {
+          // Histórico: últimas 20 mensagens já existentes (antes desta nova) para contexto
+          const history = messages
+            .slice(-20)
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+          const result = await aiChat({
+            data: {
+              conversationId: convId,
+              userMessage: userText,
+              history,
+              attachments: attachments.map((a) => ({
+                filename: a.filename,
+                kind: a.kind,
+                mime: a.mime,
+                size: a.size,
+              })),
+            },
+          });
+          replyContent = result.reply;
+        } catch (err) {
+          console.error(err);
+          replyContent = smartReply(text, attachments);
+        }
       }
 
-      // Pequeno delay para sensação de "pensando"
-      await new Promise((r) => setTimeout(r, 350));
       await persistMessage(convId, "assistant", replyContent, []);
       invalidateMessages();
     } catch (e) {
