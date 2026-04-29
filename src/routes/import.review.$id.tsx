@@ -40,6 +40,12 @@ import {
   confirmStaging,
   discardSession,
 } from "@/server/import-engine.functions";
+import { supabase } from "@/integrations/supabase/client";
+
+async function getToken(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? "";
+}
 
 export const Route = createFileRoute("/import/review/$id")({
   head: () => ({
