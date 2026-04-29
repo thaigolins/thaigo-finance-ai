@@ -185,7 +185,7 @@ function inferKind(descAndContext: string, amountIsNegative: boolean, hasMinusBe
   // Indicadores textuais de saída
   if (/\b(pix\s+enviado|pix\s+qr|pix\s+pago|enviado|pago|d[eé]bito|saque|tarifa|compra|cart[aã]o|boleto pago|transfer[eê]ncia enviada|ted enviada|doc enviado)\b/.test(t)) return "expense";
   // Indicadores de entrada
-  if (/\b(pix\s+recebid|recebid|cr[eé]dito|dep[oó]sito|sal[aá]rio|estorno|provent|ordem de cr[eé]dito|ted recebida|doc recebido|entrada|rendimento)\b/.test(t)) return "income";
+  if (/(\bpix\s+recebid|\brecebid|\bcr[eé]dito|\bdep[oó]sito|\bsal[aá]rio|\bestorno|\bprovent|\bordem\s+de\s+cr[eé]dito|\bted\s+recebid|\bdoc\s+recebid|\bentrada\b|\brendimento|\bremunera[cç][aã]o|\btransfer[eê]ncia\s+recebid)/i.test(t)) return "income";
   return "expense";
 }
 
