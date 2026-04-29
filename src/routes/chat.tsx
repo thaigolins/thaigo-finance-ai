@@ -34,7 +34,9 @@ import { uploadFile, type StorageBucket } from "@/lib/storage";
 import { useUserList, useUserInsert, useUserDelete, useInvalidate } from "@/lib/queries";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { extractDocument } from "@/server/document-extraction.functions";
+import { startImport } from "@/server/import-engine.functions";
 import { PendingActionCard, type PendingActionData } from "@/components/pending-action-card";
+import { ImportSessionCard, type ImportSessionSummary } from "@/components/import-session-card";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({
@@ -55,6 +57,7 @@ type Message = {
   metadata: {
     attachments?: AttachmentMeta[];
     pendingAction?: PendingActionData;
+    importSession?: ImportSessionSummary;
   } | null;
 };
 type AttachmentMeta = {
@@ -215,6 +218,7 @@ function ChatPage() {
   const { user } = useAuth();
   const aiChat = useServerFn(aiFinancialChat);
   const extractDoc = useServerFn(extractDocument);
+  const startImportFn = useServerFn(startImport);
   const qc = useQueryClient();
   const invalidateConvs = useInvalidate("ai_conversations");
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -289,6 +293,7 @@ function ChatPage() {
     const baseMeta: NonNullable<Message["metadata"]> = {};
     if (attachments.length > 0) baseMeta.attachments = attachments;
     if (extraMeta?.pendingAction) baseMeta.pendingAction = extraMeta.pendingAction;
+    if (extraMeta?.importSession) baseMeta.importSession = extraMeta.importSession;
     const metadata = Object.keys(baseMeta).length > 0 ? baseMeta : null;
     const { error } = await supabase.from("ai_messages").insert({
       conversation_id: conversationId,
@@ -388,6 +393,46 @@ function ChatPage() {
         }
         setProcessingAttachment(true);
         try {
+          // Extrato bancário usa o motor novo (documentImportEngine).
+          if (ek === "extrato") {
+            const r = await startImportFn({
+              data: {
+                bucket: att.bucket as "invoices" | "bank-statements" | "payslips" | "fgts-statements" | "loan-contracts" | "images",
+                path: att.path,
+                filename: att.filename,
+                mime: att.mime || (att.bucket === "images" ? "image/jpeg" : "application/pdf"),
+                kind: "extrato",
+                uploadedFileId: uploadedFileId ?? undefined,
+                conversationId: convId!,
+              },
+            });
+            if (r.ok) {
+              const intro = `Li seu **extrato** (\`${att.filename}\`) e identifiquei **${r.totalCount} lançamento(s)**${r.duplicateCount > 0 ? ` · ${r.duplicateCount} possível(eis) duplicata(s)` : ""}. Revise antes de gravar.`;
+              await persistMessage(convId!, "assistant", intro, [], {
+                importSession: {
+                  sessionId: r.sessionId,
+                  totalCount: r.totalCount,
+                  duplicateCount: r.duplicateCount,
+                  totalCredits: r.totalCredits,
+                  totalDebits: r.totalDebits,
+                  net: r.net,
+                  bankHint: r.bankHint,
+                  periodStart: r.periodStart,
+                  periodEnd: r.periodEnd,
+                },
+              });
+              return true;
+            }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const reasonEx = (r as any)?.error || "Falha ao processar extrato";
+            await persistMessage(
+              convId!,
+              "assistant",
+              `Não consegui extrair os dados de **${att.filename}**. Motivo: ${reasonEx}`,
+              [],
+            );
+            return false;
+          }
           const r = await extractDoc({
             data: {
               bucket: att.bucket as
@@ -726,6 +771,9 @@ function ChatPage() {
                       )}
                       {m.metadata?.pendingAction && (
                         <PendingActionCard action={m.metadata.pendingAction} />
+                      )}
+                      {m.metadata?.importSession && (
+                        <ImportSessionCard data={m.metadata.importSession} />
                       )}
                     </div>
                   </div>
