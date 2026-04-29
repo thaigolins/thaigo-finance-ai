@@ -159,51 +159,159 @@ async function ocrFreeText(opts: {
   return callGateway("google/gemini-2.5-flash", messages, opts.apiKey, { jsonMode: false });
 }
 
-// Parser regex de extrato (linhas tipo "10/04  PIX RECEBIDO JOAO  1.234,56  C")
+// ============================================================
+// Parser brasileiro robusto (PIX, TED, DOC, débito, crédito)
+// Suporta layouts inline (1 linha) e multi-linha (apps de banco mobile).
+// ============================================================
+
+const MES_PT: Record<string, string> = {
+  jan: "01", fev: "02", mar: "03", abr: "04", mai: "05", jun: "06",
+  jul: "07", ago: "08", set: "09", out: "10", nov: "11", dez: "12",
+};
+
+function parseBrAmount(raw: string): { amount: number; isNegative: boolean } | null {
+  const s = raw.replace(/\s/g, "");
+  const isNegative = /^-/.test(s) || /-R\$/.test(s);
+  const cleaned = s.replace(/[R$]/g, "").replace(/^-/, "").replace(/\./g, "").replace(",", ".");
+  const n = Number(cleaned);
+  if (!Number.isFinite(n) || n === 0) return null;
+  return { amount: Math.abs(n), isNegative };
+}
+
+function inferKind(descAndContext: string, amountIsNegative: boolean, hasMinusBeforeAmount: boolean): "income" | "expense" {
+  const t = descAndContext.toLowerCase();
+  // Sinal explícito sempre vence
+  if (hasMinusBeforeAmount || amountIsNegative) return "expense";
+  // Indicadores textuais de saída
+  if (/\b(pix\s+enviado|pix\s+qr|pix\s+pago|enviado|pago|d[eé]bito|saque|tarifa|compra|cart[aã]o|boleto pago|transfer[eê]ncia enviada|ted enviada|doc enviado)\b/.test(t)) return "expense";
+  // Indicadores de entrada
+  if (/\b(pix\s+recebid|recebid|cr[eé]dito|dep[oó]sito|sal[aá]rio|estorno|provent|ordem de cr[eé]dito|ted recebida|doc recebido|entrada|rendimento)\b/.test(t)) return "income";
+  return "expense";
+}
+
+function normalizeDate(dateStr: string, yearHint: number): string | null {
+  // dd/mm[/yyyy]
+  let m = dateStr.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  if (m) {
+    const dd = m[1].padStart(2, "0");
+    const mm = m[2].padStart(2, "0");
+    let yyyy = m[3] ?? String(yearHint);
+    if (yyyy.length === 2) yyyy = (Number(yyyy) > 50 ? "19" : "20") + yyyy;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  // "23 de abr" / "23 abr 2026"
+  m = dateStr.match(/^(\d{1,2})\s+(?:de\s+)?([a-zç]{3,})\.?(?:\s+(?:de\s+)?(\d{2,4}))?$/i);
+  if (m) {
+    const dd = m[1].padStart(2, "0");
+    const monKey = m[2].slice(0, 3).toLowerCase().replace("ç", "c");
+    const mm = MES_PT[monKey];
+    if (!mm) return null;
+    let yyyy = m[3] ?? String(yearHint);
+    if (yyyy.length === 2) yyyy = (Number(yyyy) > 50 ? "19" : "20") + yyyy;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return null;
+}
+
+function isLikelyHeaderOrBalance(line: string): boolean {
+  return /\b(saldo\s+(do\s+dia|anterior|atual|final|inicial|dispon[ií]vel)|total\s+(de\s+)?(cr[eé]ditos|d[eé]bitos)|extrato|p[aá]gina|lan[çc]amentos|recentes|futuros)\b/i.test(line);
+}
+
+const AMOUNT_RE_GLOBAL = /(-?\s*R?\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})/g;
+const DATE_INLINE_RE = /\b(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{1,2}\s+(?:de\s+)?[a-zç]{3,}\.?(?:\s+(?:de\s+)?\d{2,4})?)\b/i;
+
 function parseExtratoFromText(text: string): RawTx[] {
   const txs: RawTx[] = [];
   const yearNow = new Date().getFullYear();
-  // captura: data dd/mm[/yyyy] ... valor brasileiro ... opcional indicador C/D ou - sinal
-  const lineRe = /(\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b)\s+(.+?)\s+(-?R?\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})\s*([CD]|cr[eé]dito|d[eé]bito|\+|-)?\s*$/gim;
-  const lines = text.split(/\r?\n/);
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) continue;
-    lineRe.lastIndex = 0;
-    const m = lineRe.exec(line);
-    if (!m) continue;
-    const [, dateStr, descRaw, amountStr, indicator] = m;
-    const dParts = dateStr.split("/");
-    const dd = dParts[0].padStart(2, "0");
-    const mm = dParts[1].padStart(2, "0");
-    let yyyy = dParts[2] ?? String(yearNow);
-    if (yyyy.length === 2) yyyy = (Number(yyyy) > 50 ? "19" : "20") + yyyy;
-    const occurred_at = `${yyyy}-${mm}-${dd}`;
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
 
-    const cleaned = amountStr.replace(/[R$\s]/g, "");
-    const isNegative = cleaned.startsWith("-");
-    const numStr = cleaned.replace(/^-/, "").replace(/\./g, "").replace(",", ".");
-    const amount = Number(numStr);
-    if (!Number.isFinite(amount) || amount === 0) continue;
+  // Estado para layout multi-linha tipo app mobile:
+  // cabeçalho de data ("Sex, 24 de abr - 2026") seta currentDate;
+  // depois cada bloco transação tem descrição (1+ linhas) + valor "-R$ 10,00"
+  let currentDate: string | null = null;
+  let buffer: string[] = [];
 
-    let kind: "income" | "expense" = "expense";
-    const ind = (indicator ?? "").toLowerCase();
-    if (ind === "c" || ind.startsWith("cr") || ind === "+") kind = "income";
-    else if (ind === "d" || ind.startsWith("d") || ind === "-" || isNegative) kind = "expense";
-    else {
-      // Heurística textual
-      if (/\b(recebid|cr[eé]dito|dep[oó]sito|sal[aá]rio|estorno|entrada|pix recebid)/i.test(descRaw)) kind = "income";
+  const flushBuffer = (amountLine: string) => {
+    if (!currentDate) return;
+    const amt = parseBrAmount(amountLine.match(AMOUNT_RE_GLOBAL)?.[0] ?? "");
+    if (!amt) return;
+    const hasMinusBeforeAmount = /-\s*R?\$?\s*\d/.test(amountLine);
+    const desc = buffer.join(" ").replace(/\s+/g, " ").trim();
+    if (!desc) return;
+    if (isLikelyHeaderOrBalance(desc)) return;
+    const kind = inferKind(desc, amt.isNegative, hasMinusBeforeAmount);
+    txs.push({
+      occurred_at: currentDate,
+      description: desc.slice(0, 200),
+      amount: amt.amount,
+      kind,
+      category_hint: /pix/i.test(desc) ? "pix" : /ted/i.test(desc) ? "ted" : /doc/i.test(desc) ? "doc" : /boleto/i.test(desc) ? "boleto" : /sal[aá]rio/i.test(desc) ? "salario" : /tarifa/i.test(desc) ? "tarifa" : null,
+      confidence: 0.5,
+    });
+  };
+
+  for (const line of lines) {
+    // 1) tenta inline: "10/04 PIX RECEBIDO JOAO 1.234,56 C"
+    const inlineDate = line.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+(.+)$/);
+    const amounts = line.match(AMOUNT_RE_GLOBAL);
+    if (inlineDate && amounts && amounts.length > 0) {
+      const dt = normalizeDate(inlineDate[1], yearNow);
+      const lastAmt = amounts[amounts.length - 1];
+      const amt = parseBrAmount(lastAmt);
+      if (dt && amt) {
+        const idx = line.lastIndexOf(lastAmt);
+        const before = line.slice(inlineDate[1].length, idx).trim();
+        const after = line.slice(idx + lastAmt.length).trim();
+        const indicator = after.match(/^([CD]|cr[eé]dito|d[eé]bito|\+|-)/i)?.[1] ?? "";
+        const ind = indicator.toLowerCase();
+        let kind: "income" | "expense";
+        if (ind === "c" || ind.startsWith("cr") || ind === "+") kind = "income";
+        else if (ind === "d" || ind.startsWith("d") || ind === "-") kind = "expense";
+        else kind = inferKind(before, amt.isNegative, /-\s*R?\$?\s*\d/.test(line.slice(0, idx + lastAmt.length).slice(-15)));
+        if (!isLikelyHeaderOrBalance(before)) {
+          txs.push({
+            occurred_at: dt,
+            description: before.replace(/\s+/g, " ").slice(0, 200),
+            amount: amt.amount,
+            kind,
+            category_hint: /pix/i.test(before) ? "pix" : /ted/i.test(before) ? "ted" : /doc/i.test(before) ? "doc" : null,
+            confidence: 0.55,
+          });
+          buffer = [];
+          continue;
+        }
+      }
     }
 
-    txs.push({
-      occurred_at,
-      description: descRaw.replace(/\s+/g, " ").trim().slice(0, 200),
-      amount: Math.abs(amount),
-      kind,
-      category_hint: null,
-      confidence: 0.4,
-    });
+    // 2) cabeçalho de data multi-linha ("Sex, 24 de abr - 2026" ou "Qui, 23 de abr")
+    const dmatch = line.match(DATE_INLINE_RE);
+    if (dmatch && /saldo|sex|seg|ter|qua|qui|sab|dom|de\s+[a-z]{3}/i.test(line)) {
+      const nd = normalizeDate(dmatch[1], yearNow);
+      if (nd) {
+        currentDate = nd;
+        buffer = [];
+        continue;
+      }
+    }
+
+    // 3) linha que CONTÉM apenas valor ou termina com valor — fecha bloco multi-linha
+    if (amounts && amounts.length > 0 && currentDate && buffer.length > 0) {
+      // remove o valor da linha; o que sobrar entra no buffer como descrição extra
+      const lastAmt = amounts[amounts.length - 1];
+      const idx = line.lastIndexOf(lastAmt);
+      const beforeAmt = line.slice(0, idx).trim();
+      if (beforeAmt && !isLikelyHeaderOrBalance(beforeAmt)) buffer.push(beforeAmt);
+      flushBuffer(lastAmt);
+      buffer = [];
+      continue;
+    }
+
+    // 4) linha de texto puro — acumula no buffer (descrição multi-linha)
+    if (!isLikelyHeaderOrBalance(line)) {
+      buffer.push(line);
+    }
   }
+
   return txs;
 }
 
