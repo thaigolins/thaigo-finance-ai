@@ -54,10 +54,17 @@ function ExtratosPage() {
 
   const bankUploads = uploads.filter((u) => u.bucket === "bank-statements");
 
-  const grouped = txs.reduce<Record<string, Tx[]>>((acc, t) => {
-    (acc[t.occurred_at] ||= []).push(t);
-    return acc;
-  }, {});
+  // Agrupa transações por conta, depois por data
+  const byAccount: Record<string, { account: Account; txs: Tx[] }> = {};
+  for (const a of accounts) {
+    byAccount[a.id] = { account: a, txs: [] };
+  }
+  byAccount["sem-conta"] = { account: { id: "sem-conta", bank: "Sem conta vinculada" }, txs: [] };
+  for (const tx of txs) {
+    const key = tx.bank_account_id && byAccount[tx.bank_account_id] ? tx.bank_account_id : "sem-conta";
+    byAccount[key].txs.push(tx);
+  }
+  const accountGroups = Object.values(byAccount).filter((g) => g.txs.length > 0);
 
   const accountName = (id: string | null) =>
     accounts.find((a) => a.id === id)?.bank ?? "Sem conta";
