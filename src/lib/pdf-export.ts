@@ -281,7 +281,11 @@ function renderPrivateHeader(doc: jsPDF, payload: PdfPayload, y: number): number
   return Math.max(y, 70);
 }
 
-export function generatePdf(payload: PdfPayload, kind: PdfKind) {
+export function generatePdf(
+  payload: PdfPayload,
+  kind: PdfKind,
+  opts: { autoDownload?: boolean } = { autoDownload: true },
+): { blob: Blob; filename: string } {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const w = doc.internal.pageSize.getWidth();
   const contentW = w - 80;
@@ -375,8 +379,12 @@ export function generatePdf(payload: PdfPayload, kind: PdfKind) {
   }
 
   addFooter(doc, kind);
-  const fname = `${payload.module.toLowerCase().replace(/\s+/g, "-")}-${kind}-${Date.now()}.pdf`;
-  doc.save(fname);
+  const filename = `${payload.module.toLowerCase().replace(/\s+/g, "-")}-${kind}-${Date.now()}.pdf`;
+  const blob = doc.output("blob");
+  if (opts.autoDownload !== false) {
+    doc.save(filename);
+  }
+  return { blob, filename };
 }
 
 // ============ Module-specific payload builders ============
