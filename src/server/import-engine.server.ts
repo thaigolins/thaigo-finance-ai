@@ -260,9 +260,9 @@ export async function extractBankStatementFromImage(opts: {
     }
     const parsed = safeParseJson(content);
     if (!parsed || typeof parsed !== "object") {
-      const preview = content.slice(0, 200);
-      const msg = `${model}: resposta não-JSON (preview: ${preview})`;
-      console.error("[import-engine] parse failed", msg);
+      const preview = content.slice(0, 500).replace(/\s+/g, " ");
+      const msg = `${model}: parse JSON falhou (len=${content.length}, preview 500ch: ${preview})`;
+      console.error("[import-engine] PARSE FAILED", { model, len: content.length, preview });
       errorsCollected.push(msg);
       return null;
     }
@@ -284,7 +284,7 @@ export async function extractBankStatementFromImage(opts: {
         confidence: typeof r.confidence === "number" ? r.confidence : null,
       });
     }
-    console.log("[import-engine] parsed ok", { model, count: transactions.length });
+    console.log("[import-engine] PARSED OK", { model, txCount: transactions.length, bank_hint: p.bank_hint });
     return {
       method: "image_ai",
       bank_hint: typeof p.bank_hint === "string" ? p.bank_hint : null,
@@ -311,6 +311,39 @@ export async function extractBankStatementFromImage(opts: {
     const pro = await tryModel("google/gemini-2.5-pro");
     if (pro && pro.transactions.length > 0) {
       result = pro;
+    }
+  }
+
+  // Fallback: OCR livre + parser regex se nada estruturado
+  if (!result || result.transactions.length === 0) {
+    console.warn("[import-engine] FALLBACK: tentando OCR livre + regex");
+    try {
+      const ocrText = await ocrFreeText({ base64, mime, apiKey });
+      console.log("[import-engine] OCR text length", { len: ocrText.length, preview: ocrText.slice(0, 300) });
+      if (ocrText.trim().length > 0) {
+        const regexTxs = parseExtratoFromText(ocrText);
+        console.log("[import-engine] regex parser", { extracted: regexTxs.length });
+        if (regexTxs.length > 0) {
+          return {
+            method: "ai_fallback",
+            transactions: regexTxs,
+            errors: [
+              ...errorsCollected,
+              `Fallback OCR+regex usado (${regexTxs.length} lançamento(s) detectados).`,
+            ],
+            raw: { ocr_preview: ocrText.slice(0, 1000) },
+          };
+        }
+        errorsCollected.push(
+          `OCR retornou ${ocrText.length} caracteres mas o parser regex não encontrou linhas no formato esperado. Preview: ${ocrText.slice(0, 300)}`,
+        );
+      } else {
+        errorsCollected.push("OCR retornou texto vazio.");
+      }
+    } catch (e) {
+      const msg = `Fallback OCR falhou: ${e instanceof Error ? e.message : String(e)}`;
+      console.error("[import-engine]", msg);
+      errorsCollected.push(msg);
     }
   }
 
