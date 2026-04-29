@@ -93,6 +93,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 async function callGateway(model: string, messages: unknown, apiKey: string) {
+  console.log("[import-engine] gateway request", { model });
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -103,16 +104,20 @@ async function callGateway(model: string, messages: unknown, apiKey: string) {
       response_format: { type: "json_object" },
     }),
   });
+  console.log("[import-engine] gateway response", { model, status: res.status });
   if (!res.ok) {
     const status = res.status;
     let detail = "";
     try { detail = await res.text(); } catch { /* ignore */ }
+    console.error("[import-engine] gateway error body", { model, status, detail: detail.slice(0, 500) });
     if (status === 429) throw new Error("Limite de uso atingido. Aguarde e tente novamente.");
     if (status === 402) throw new Error("Créditos do gateway de IA esgotados.");
-    throw new Error(`Gateway respondeu ${status}: ${detail.slice(0, 200)}`);
+    throw new Error(`Gateway respondeu ${status}: ${detail.slice(0, 300)}`);
   }
   const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-  return json.choices?.[0]?.message?.content ?? "";
+  const content = json.choices?.[0]?.message?.content ?? "";
+  console.log("[import-engine] gateway content length", { model, len: content.length });
+  return content;
 }
 
 /**
@@ -134,6 +139,7 @@ export async function extractBankStatementFromImage(opts: {
   }
 
   const base64 = bytesToBase64(opts.fileBytes);
+  console.log("[import-engine] image base64 size", { bytes: opts.fileBytes.byteLength, b64: base64.length });
   if (base64.length > 8_500_000) {
     return {
       method: "image_ai",
@@ -154,45 +160,56 @@ export async function extractBankStatementFromImage(opts: {
     },
   ];
 
+  const errorsCollected: string[] = [];
   const tryModel = async (model: string): Promise<ExtractionResult | null> => {
+    let content: string;
     try {
-      const content = await callGateway(model, messages, apiKey);
-      const parsed = safeParseJson(content);
-      if (!parsed || typeof parsed !== "object") return null;
-      const p = parsed as Record<string, unknown>;
-      const txsRaw = Array.isArray(p.transactions) ? (p.transactions as unknown[]) : [];
-      const transactions: RawTx[] = [];
-      for (const t of txsRaw) {
-        if (!t || typeof t !== "object") continue;
-        const r = t as Record<string, unknown>;
-        const amount = Number(r.amount);
-        const k = r.kind === "income" ? "income" : "expense";
-        if (!Number.isFinite(amount) || amount === 0) continue;
-        transactions.push({
-          occurred_at: typeof r.occurred_at === "string" ? r.occurred_at : null,
-          description: String(r.description ?? "").trim(),
-          amount: Math.abs(amount),
-          kind: k,
-          category_hint: typeof r.category_hint === "string" ? r.category_hint : null,
-          confidence: typeof r.confidence === "number" ? r.confidence : null,
-        });
-      }
-      return {
-        method: "image_ai",
-        bank_hint: typeof p.bank_hint === "string" ? p.bank_hint : null,
-        account_hint: typeof p.account_hint === "string" ? p.account_hint : null,
-        period_start: typeof p.period_start === "string" ? p.period_start : null,
-        period_end: typeof p.period_end === "string" ? p.period_end : null,
-        opening_balance: typeof p.opening_balance === "number" ? p.opening_balance : null,
-        closing_balance: typeof p.closing_balance === "number" ? p.closing_balance : null,
-        transactions,
-        errors: Array.isArray(p.errors) ? (p.errors as string[]) : [],
-        raw: parsed,
-      };
+      content = await callGateway(model, messages, apiKey);
     } catch (e) {
-      console.error(`[import-engine] ${model} failed:`, e);
+      const msg = `${model}: ${e instanceof Error ? e.message : String(e)}`;
+      console.error("[import-engine] callGateway threw", msg);
+      errorsCollected.push(msg);
       return null;
     }
+    const parsed = safeParseJson(content);
+    if (!parsed || typeof parsed !== "object") {
+      const preview = content.slice(0, 200);
+      const msg = `${model}: resposta não-JSON (preview: ${preview})`;
+      console.error("[import-engine] parse failed", msg);
+      errorsCollected.push(msg);
+      return null;
+    }
+    const p = parsed as Record<string, unknown>;
+    const txsRaw = Array.isArray(p.transactions) ? (p.transactions as unknown[]) : [];
+    const transactions: RawTx[] = [];
+    for (const t of txsRaw) {
+      if (!t || typeof t !== "object") continue;
+      const r = t as Record<string, unknown>;
+      const amount = Number(r.amount);
+      const k = r.kind === "income" ? "income" : "expense";
+      if (!Number.isFinite(amount) || amount === 0) continue;
+      transactions.push({
+        occurred_at: typeof r.occurred_at === "string" ? r.occurred_at : null,
+        description: String(r.description ?? "").trim(),
+        amount: Math.abs(amount),
+        kind: k,
+        category_hint: typeof r.category_hint === "string" ? r.category_hint : null,
+        confidence: typeof r.confidence === "number" ? r.confidence : null,
+      });
+    }
+    console.log("[import-engine] parsed ok", { model, count: transactions.length });
+    return {
+      method: "image_ai",
+      bank_hint: typeof p.bank_hint === "string" ? p.bank_hint : null,
+      account_hint: typeof p.account_hint === "string" ? p.account_hint : null,
+      period_start: typeof p.period_start === "string" ? p.period_start : null,
+      period_end: typeof p.period_end === "string" ? p.period_end : null,
+      opening_balance: typeof p.opening_balance === "number" ? p.opening_balance : null,
+      closing_balance: typeof p.closing_balance === "number" ? p.closing_balance : null,
+      transactions,
+      errors: Array.isArray(p.errors) ? (p.errors as string[]) : [],
+      raw: parsed,
+    };
   };
 
   // 1ª tentativa: Flash
@@ -214,8 +231,14 @@ export async function extractBankStatementFromImage(opts: {
     return {
       method: "image_ai",
       transactions: [],
-      errors: ["A IA não conseguiu estruturar este documento. Tente um print mais legível."],
+      errors: errorsCollected.length > 0
+        ? errorsCollected
+        : ["A IA não conseguiu estruturar este documento. Tente um print mais legível."],
     };
+  }
+  // Anexa erros coletados também quando algum modelo deu certo no fim
+  if (errorsCollected.length > 0) {
+    result = { ...result, errors: [...(result.errors ?? []), ...errorsCollected] };
   }
   return result;
 }
