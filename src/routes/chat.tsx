@@ -603,9 +603,13 @@ function ChatPage() {
       try {
         const { data: accs } = await supabase
           .from("bank_accounts")
-          .select("id, bank")
+          .select("id, bank, account_number")
           .eq("user_id", user.id);
-        const accounts = (accs ?? []).map((a) => ({ id: a.id as string, bank: (a.bank as string) ?? "" }));
+        const accounts = (accs ?? []).map((a) => ({
+          id: a.id as string,
+          bank: (a.bank as string) ?? "",
+          account_number: (a.account_number as string | null) ?? null,
+        }));
         mentionedAccountId = detectBankInText(text, accounts);
       } catch (e) {
         console.warn("[chat] detectBankInText fail", e);
