@@ -735,19 +735,27 @@ function ChatPage() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/30 bg-emerald-soft">
                   <Sparkles className="h-4 w-4 text-primary" strokeWidth={2} />
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-success" />
+                <span className={cn(
+                  "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card",
+                  user ? "bg-success" : "bg-destructive",
+                )} />
               </div>
               <div>
                 <p className="text-sm font-semibold tracking-tight">
                   {activeConv?.title ?? "Thaigo AI · Private"}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  Conectado · Análise em tempo real
+                  {user ? "Conectado · Análise em tempo real" : "Não autenticado · faça login para usar"}
                 </p>
               </div>
             </div>
-            <span className="rounded-full border border-border/40 bg-muted/20 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              GPT · Financeiro
+            <span className={cn(
+              "rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider",
+              user
+                ? "border-border/40 bg-muted/20 text-muted-foreground"
+                : "border-destructive/40 bg-destructive/10 text-destructive",
+            )}>
+              {user ? "GPT · Financeiro" : "Sessão ausente"}
             </span>
           </div>
 
