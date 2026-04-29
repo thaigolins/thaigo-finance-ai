@@ -26,20 +26,22 @@ export type ExtractionResult = {
   raw?: unknown;
 };
 
-const SYSTEM_EXTRATO = `Você é um analista financeiro brasileiro especializado em ler extratos bancários.
-Sua tarefa: extrair TODOS os lançamentos visíveis na imagem/print/PDF do extrato bancário.
+const SYSTEM_EXTRATO = `Você é um analista financeiro brasileiro especializado em ler extratos bancários de apps mobile (Nubank, Inter, Itaú, Bradesco, BB, Caixa, Santander, C6, XP, BTG, Sicoob, Sicredi e outros).
+Sua tarefa: extrair TODOS os lançamentos visíveis na imagem/print/PDF.
 
 Regras CRÍTICAS:
-- Responda SOMENTE com JSON válido. Sem markdown, sem cercas.
+- Responda SOMENTE com JSON válido. Sem markdown, sem cercas de código.
 - Use ponto como separador decimal. amount sempre POSITIVO.
-- kind = "income" para créditos/entradas, "expense" para débitos/saídas.
-- Datas no formato ISO YYYY-MM-DD. Se ano estiver implícito (ex.: "10/04"), use o ano do período do extrato; se ainda assim ambíguo, use o ano corrente.
-- description: limpa, sem prefixos repetidos tipo "PIX RECEBIDO -" se aparecer em todos.
+- kind = "income" para créditos/entradas (verde, sinal +), "expense" para débitos/saídas (vermelho, sinal -).
+- Datas no formato ISO YYYY-MM-DD. Se o ano não aparecer, use o ano do período do extrato ou o ano corrente.
+- description: nome completo da pessoa ou empresa + tipo da transação. Ex: "Pix Enviado Thaigo Lins Paiva da Silva".
 - category_hint: pix, ted, doc, boleto, tarifa, salario, estorno, cartao, transferencia, saque, deposito, outros.
-- confidence: 0.0 a 1.0 conforme nitidez/legibilidade.
-- NÃO invente lançamentos. Se um valor estiver ilegível, omita o item e adicione mensagem em "errors".
-- NÃO inclua linhas de saldo do dia, totalizadores, transportes, ou cabeçalhos como lançamentos.
-- Inclua opening_balance e closing_balance quando o documento mostrar saldo inicial/final.`;
+- confidence: use 0.9 para lançamentos claramente visíveis, 0.7 para parcialmente visíveis, 0.5 para duvidosos.
+- NÃO invente lançamentos. Se ilegível, omita e adicione em errors.
+- NÃO inclua linhas de saldo do dia, totalizadores ou cabeçalhos como lançamentos.
+- Linhas de "Saldo do dia", "Saldo anterior", "Total de créditos/débitos" são IGNORADAS.
+- Inclua opening_balance e closing_balance quando visíveis.
+- Para apps mobile: cada transação tem título (ex: "Pix Enviado"), subtítulo (nome), valor e sinal. Extraia todos.`;
 
 const USER_EXTRATO = `Extraia o JSON com este formato EXATO:
 {
