@@ -179,7 +179,7 @@ function classifyAttachment(file: File): { bucket: StorageBucket; kind: string }
   if (/contracheque|holerite|payslip/.test(name)) return { bucket: "payslips", kind: "contracheque" };
   if (/contrato|emprestimo|empr[ée]stimo|loan/.test(name)) return { bucket: "loan-contracts", kind: "contrato" };
   if (/extrato|statement/.test(name)) return { bucket: "bank-statements", kind: "extrato" };
-  if (file.type.startsWith("image/")) return { bucket: "images", kind: "imagem" };
+  if (file.type.startsWith("image/")) return { bucket: "bank-statements", kind: "extrato" };
   return { bucket: "bank-statements", kind: "extrato" };
 }
 
