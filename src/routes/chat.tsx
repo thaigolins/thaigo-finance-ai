@@ -453,11 +453,11 @@ function ChatPage() {
             }
             const reasonEx =
               (r && (r.error || r.message)) ||
-              "Não foi possível extrair os lançamentos.";
+              "nenhum detalhe retornado";
             await persistMessage(
               convId!,
               "assistant",
-              `Não consegui extrair os dados de **${att.filename}**. Motivo: ${reasonEx}`,
+              `IMPORT ENGINE vNEXT :: ${reasonEx}`,
               [],
             );
             return false;
