@@ -75,7 +75,7 @@ export const startImport = createServerFn({ method: "POST" })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = sbTyped as any;
 
-    console.log("[startImport] step=begin", {
+    console.log("[startImport] VERSION_IMPORT_ENGINE_29APR step=begin", {
       userId,
       bucket: data.bucket,
       path: data.path,
