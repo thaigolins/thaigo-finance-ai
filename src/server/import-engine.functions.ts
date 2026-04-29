@@ -493,15 +493,17 @@ export const confirmStaging = createServerFn({ method: "POST" })
     return { ok: true as const, confirmedCount: staging.length, pendingCount };
   });
 
-const DiscardInput = z.object({ sessionId: z.string().uuid() });
+const DiscardInput = z.object({
+  sessionId: z.string().uuid(),
+  token: z.string().min(1),
+});
 
 export const discardSession = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d) => DiscardInput.parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase: sbTyped, userId } = context;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = sbTyped as any;
+  .handler(async ({ data }) => {
+    const auth = await authFromToken(data.token);
+    if (!auth.ok) return { ok: false as const, error: auth.error };
+    const { supabase, userId } = auth;
 
     const upd = await supabase
       .from("import_sessions")
