@@ -134,7 +134,7 @@ export const Route = createFileRoute("/api/import/extrato")({
               raw_extraction: (result.raw ?? null) as any,
             })
             .eq("id", sessionId);
-          return json({ ok: false, error: `Nenhum lançamento identificado. ${detail}` }, 200);
+          return json({ ok: false, error: `Nenhum lançamento identificado no extrato.`, detail }, 200);
         }
 
         const dupes = await detectDuplicates({
