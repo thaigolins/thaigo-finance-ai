@@ -204,11 +204,56 @@ export function PendingActionCard({
       return n;
     });
   };
+  const selectByKind = (k: "income" | "expense") => {
+    setSelectedTx(new Set(txs.map((t, i) => (String(t.kind) === k ? i : -1)).filter((i) => i >= 0)));
+  };
+
+  // Total dos lançamentos selecionados (créditos - débitos para extrato; soma para fatura)
+  const selectedTotal = useMemo(() => {
+    let credit = 0;
+    let debit = 0;
+    let sum = 0;
+    txs.forEach((t, i) => {
+      if (!selectedTx.has(i)) return;
+      const amt = Math.abs(Number(t.amount ?? 0));
+      sum += amt;
+      if (action.kind === "extrato") {
+        if (String(t.kind) === "income") credit += amt;
+        else debit += amt;
+      }
+    });
+    return { credit, debit, sum };
+  }, [txs, selectedTx, action.kind]);
+
+  // Validação de campos obrigatórios
+  const missingRequired = useMemo(() => {
+    return fields
+      .filter((f) => f.required && isEmptyValue(merged[f.key]))
+      .map((f) => f.label);
+  }, [fields, merged]);
+
+  // Campos editados pelo usuário (overrides com valor diferente do original)
+  const editedKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const k of Object.keys(overrides)) {
+      if (overrides[k] !== action.payload[k]) set.add(k);
+    }
+    return set;
+  }, [overrides, action.payload]);
 
   const handleConfirm = async () => {
+    if (missingRequired.length > 0) {
+      toast.error(`Preencha os campos obrigatórios: ${missingRequired.join(", ")}`);
+      setEditing(true);
+      setOpen(true);
+      return;
+    }
+    if (hasTxs && txs.length > 0 && noneSelected) {
+      toast.error("Selecione ao menos um lançamento para confirmar.");
+      return;
+    }
     setBusy("confirm");
     try {
-      // Se editou lançamentos, envia seleção parcial só se diferente do total
       const ovr: Record<string, unknown> = { ...overrides };
       let selectedIndices: number[] | undefined;
       if (hasTxs && txs.length > 0 && !allSelected) {
