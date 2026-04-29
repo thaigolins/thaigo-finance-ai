@@ -493,26 +493,31 @@ export async function extractBankStatementHybridFromImage(opts: {
     errorsCollected.push(msg);
   }
 
-  // IMPORTANTE: parser determinístico só sobre OCR puro. Concatenar JSON da IA
-  // contamina a última descrição com o cabeçalho "--- AI_RAW ---" e quebra blocos.
-  const deterministicText = ocrText.trim();
+  // Se IA Vision extraiu lançamentos, usa direto — parser OCR é apenas complemento
+  if (result && result.transactions.length > 0) {
+    return {
+      ...result,
+      errors: [...(result.errors ?? []), ...errorsCollected],
+      raw: {
+        ...(typeof result.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
+        ocr_text: ocrText,
+        ocr_fallback_raw: ocrFallbackRaw,
+        ai_raw: aiRawByModel,
+      },
+    };
+  }
 
-  if (deterministicText.trim().length > 0) {
+  // Só usa parser OCR se IA Vision falhou
+  const deterministicText = ocrText.trim();
+  if (deterministicText.length > 0) {
     const regexTxs = parseExtratoFromText(deterministicText);
     console.log("[IMPORT_DEBUG] REGEX_TXS", regexTxs);
-    console.log("[import-engine] parser brasileiro", { extracted: regexTxs.length, total_count: regexTxs.length });
     if (regexTxs.length > 0) {
       return {
-        ...(result ?? {}),
-        method: result && result.transactions.length > 0 ? "image_ai" : "ai_fallback",
+        method: "ai_fallback",
         transactions: regexTxs,
-        errors: [
-          ...(result?.errors ?? []),
-          ...errorsCollected,
-          `Parser OCR brasileiro usado (${regexTxs.length} lançamento(s) detectados).`,
-        ],
+        errors: [...errorsCollected, `Parser OCR usado (${regexTxs.length} lançamentos).`],
         raw: {
-          ...(typeof result?.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
           ocr_text: ocrText,
           ocr_fallback_raw: ocrFallbackRaw,
           ai_raw: aiRawByModel,
@@ -522,63 +527,25 @@ export async function extractBankStatementHybridFromImage(opts: {
       };
     }
     errorsCollected.push(
-      `OCR/raw retornou texto, mas o parser identificou 0 lançamentos. OCR preview: ${ocrText.slice(0, 500)}`,
+      `OCR retornou texto, mas o parser identificou 0 lançamentos. Preview: ${ocrText.slice(0, 500)}`,
     );
-    console.error("[import-engine] parser brasileiro ERROS", {
-      parser_count: 0,
-      ocr_preview: ocrText.slice(0, 500),
-    });
-    return {
-      method: "image_ai",
-      transactions: [],
-      errors: errorsCollected,
-      raw: {
-        ...(typeof result?.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
-        ocr_text: ocrText,
-        ocr_fallback_raw: ocrFallbackRaw,
-        ai_raw: aiRawByModel,
-        parser_count: 0,
-        regex_count: 0,
-        parser_errors: errorsCollected,
-      },
-    };
   } else {
     errorsCollected.push("OCR livre retornou texto vazio.");
   }
 
-  if (!result || result.transactions.length === 0) {
-    return {
-      method: "image_ai",
-      transactions: [],
-      errors: errorsCollected.length > 0
-        ? errorsCollected
-        : ["A IA não conseguiu estruturar este documento. Tente um print mais legível."],
-      raw: {
-        ocr_text: ocrText,
-        ocr_fallback_raw: ocrFallbackRaw,
-        ai_raw: aiRawByModel,
-        parser_count: 0,
-        regex_count: 0,
-        parser_errors: errorsCollected,
-      },
-    };
-  }
-  // Anexa erros coletados também quando algum modelo deu certo no fim
-  if (errorsCollected.length > 0) {
-    result = {
-      ...result,
-      errors: [...(result.errors ?? []), ...errorsCollected],
-      raw: {
-        ...(typeof result.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
-        ocr_text: ocrText,
-        ocr_fallback_raw: ocrFallbackRaw,
-        ai_raw: aiRawByModel,
-        parser_count: 0,
-        regex_count: 0,
-      },
-    };
-  }
-  return result;
+  return {
+    method: "image_ai",
+    transactions: [],
+    errors: errorsCollected.length > 0 ? errorsCollected : ["Não foi possível extrair lançamentos."],
+    raw: {
+      ocr_text: ocrText,
+      ocr_fallback_raw: ocrFallbackRaw,
+      ai_raw: aiRawByModel,
+      parser_count: 0,
+      regex_count: 0,
+      parser_errors: errorsCollected,
+    },
+  };
 }
 
 export async function extractBankStatementFromImage(opts: {
