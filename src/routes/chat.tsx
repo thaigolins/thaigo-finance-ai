@@ -491,7 +491,7 @@ function ChatPage() {
               });
               return true;
             }
-            const reasonEx = (r && (r.error || r.message)) || "nenhum detalhe retornado";
+            const reasonEx = (r && r.error) || "nenhum detalhe retornado";
             await persistMessage(
               convId!,
               "assistant",
