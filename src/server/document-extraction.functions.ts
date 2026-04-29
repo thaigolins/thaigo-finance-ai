@@ -328,7 +328,9 @@ export const confirmPendingAction = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => ConfirmInput.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+    const { supabase: sbTyped, userId } = context;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = sbTyped as any;
 
     const { data: pending, error: pErr } = await supabase
       .from("pending_ai_actions")
