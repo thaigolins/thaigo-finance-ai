@@ -37,7 +37,7 @@ function ExtratosPage() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" className="border-border/60"><Download className="mr-1.5 h-4 w-4"/> Exportar</Button>
-            <Button className="bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90">
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
               <Upload className="mr-1.5 h-4 w-4"/> Importar
             </Button>
           </div>

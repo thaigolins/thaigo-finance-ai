@@ -29,7 +29,7 @@ function RecorrentesPage() {
             <p className="mt-1 text-sm text-muted-foreground">{recurring.length} contas ativas</p>
           </div>
           <div className="flex items-center justify-end">
-            <Button className="bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90">
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
               <Plus className="mr-1.5 h-4 w-4"/> Nova recorrente
             </Button>
           </div>
