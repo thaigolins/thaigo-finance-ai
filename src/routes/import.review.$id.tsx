@@ -122,7 +122,7 @@ function ReviewPage() {
   const reload = async () => {
     setLoading(true);
     try {
-      const r = await list({ data: { sessionId: id } });
+      const r = await list({ data: { sessionId: id, token: await getToken() } });
       if (!r.ok) {
         toast.error(r.error);
         return;
