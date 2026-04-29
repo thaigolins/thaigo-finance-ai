@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Download, FileBarChart } from "lucide-react";
+import { FileBarChart } from "lucide-react";
+import { ExportPdfDialog } from "@/components/export-pdf-dialog";
 import {
   Bar,
   BarChart,
