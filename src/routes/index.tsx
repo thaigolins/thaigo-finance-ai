@@ -60,7 +60,7 @@ type Tx = {
 };
 type Goal = { id: string; name: string; target_amount: number; current_amount: number };
 type Investment = { id: string; amount: number };
-type Recurring = { id: string; name: string; amount: number; due_day: number };
+type Recurring = { id: string; name: string; amount: number; due_day: number; status: "active" | "paused" | "cancelled" };
 
 function monthKey(d: string) {
   // expects YYYY-MM-DD
@@ -115,9 +115,14 @@ function Dashboard() {
   const mask = (v: string) => (hideBalance ? "R$ ••••••" : v);
   const hasAnyData = accounts.length + txs.length + goals.length + investments.length > 0;
 
+  const today = now.getDate();
   const upcoming = recurring
-    .slice()
-    .sort((a, b) => a.due_day - b.due_day)
+    .filter((r) => r.status === "active")
+    .map((r) => ({
+      ...r,
+      daysUntil: r.due_day >= today ? r.due_day - today : 31 + r.due_day - today,
+    }))
+    .sort((a, b) => a.daysUntil - b.daysUntil)
     .slice(0, 4);
 
   return (
@@ -234,7 +239,9 @@ function Dashboard() {
                       <div key={b.id} className="flex items-center justify-between text-sm">
                         <div className="min-w-0">
                           <p className="truncate text-sm">{b.name}</p>
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">Dia {b.due_day}</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">
+                            {b.daysUntil === 0 ? "Vence hoje" : `Em ${b.daysUntil} dia${b.daysUntil === 1 ? "" : "s"} · dia ${b.due_day}`}
+                          </p>
                         </div>
                         <span className="num font-medium">{formatBRL(Number(b.amount))}</span>
                       </div>
