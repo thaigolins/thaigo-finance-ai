@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { z } from "zod";
 import {
-  extractBankStatementFromImage,
+  extractBankStatementHybridFromImage,
   validateTransactions,
   detectDuplicates,
   type RawTx,
@@ -107,7 +107,7 @@ export const Route = createFileRoute("/api/import/extrato")({
         // 3) Extração IA
         let result;
         try {
-          result = await extractBankStatementFromImage({
+          result = await extractBankStatementHybridFromImage({
             fileBytes: bytes,
             mime: parsed.mime,
             filename: parsed.filename,
@@ -123,18 +123,26 @@ export const Route = createFileRoute("/api/import/extrato")({
         const allErrors = [...result.errors, ...vErrors];
 
         if (valid.length === 0) {
+          const raw = (result.raw && typeof result.raw === "object" ? result.raw : {}) as Record<string, unknown>;
+          const ocrText = typeof raw.ocr_text === "string" ? raw.ocr_text : "";
+          const ocrPreview = ocrText.slice(0, 500);
           const detail = allErrors.length > 0 ? allErrors.join(" | ") : "IA e OCR não retornaram lançamentos.";
+          const userError = ocrPreview
+            ? `Nenhum lançamento identificado no extrato. OCR preview: ${ocrPreview}`
+            : "Nenhum lançamento identificado no extrato.";
           console.error("[/api/import/extrato] NENHUM LANÇAMENTO", { sessionId, allErrors, raw: result.raw });
           await supabase
             .from("import_sessions")
             .update({
               status: "failed",
-              errors: allErrors.length > 0 ? allErrors : [detail],
+              errors: ocrPreview
+                ? [...(allErrors.length > 0 ? allErrors : [detail]), `OCR preview: ${ocrPreview}`]
+                : (allErrors.length > 0 ? allErrors : [detail]),
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               raw_extraction: (result.raw ?? null) as any,
             })
             .eq("id", sessionId);
-          return json({ ok: false, error: `Nenhum lançamento identificado no extrato.`, detail }, 200);
+          return json({ ok: false, error: userError }, 200);
         }
 
         const dupes = await detectDuplicates({

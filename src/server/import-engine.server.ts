@@ -146,12 +146,12 @@ async function ocrFreeText(opts: {
     {
       role: "system",
       content:
-        "Você é um OCR. Transcreva TODO o texto visível na imagem, linha por linha, preservando ordem e valores numéricos exatamente como aparecem (vírgulas, pontos, sinais). Não invente. Não resuma. Não responda em JSON.",
+        "Você é um OCR especializado em extratos bancários brasileiros. Transcreva TODO o texto visível na imagem, linha por linha, preservando a ordem visual e mantendo exatamente datas, descrições, nomes, valores, sinais negativos, vírgulas, pontos, 'Saldo do dia', 'Proventos' e 'Ordem de Crédito'. Não invente, não corrija, não resuma e não responda em JSON.",
     },
     {
       role: "user",
       content: [
-        { type: "text", text: "Transcreva todo o texto desta imagem:" },
+        { type: "text", text: "Transcreva linha por linha este print de extrato. Preserve cada linha separada, inclusive datas, nomes, valores com -R$, saldos e cabeçalhos." },
         { type: "image_url", image_url: { url: `data:${opts.mime};base64,${opts.base64}` } },
       ],
     },
@@ -170,7 +170,7 @@ const MES_PT: Record<string, string> = {
 };
 
 function parseBrAmount(raw: string): { amount: number; isNegative: boolean } | null {
-  const s = raw.replace(/\s/g, "");
+  const s = raw.replace(/[−–—]/g, "-").replace(/\s/g, "");
   const isNegative = /^-/.test(s) || /-R\$/.test(s);
   const cleaned = s.replace(/[R$]/g, "").replace(/^-/, "").replace(/\./g, "").replace(",", ".");
   const n = Number(cleaned);
@@ -214,13 +214,17 @@ function normalizeDate(dateStr: string, yearHint: number): string | null {
 }
 
 function isLikelyHeaderOrBalance(line: string): boolean {
-  return /\b(saldo\s+(do\s+dia|anterior|atual|final|inicial|dispon[ií]vel)|total\s+(de\s+)?(cr[eé]ditos|d[eé]bitos)|extrato|p[aá]gina|lan[çc]amentos|recentes|futuros)\b/i.test(line);
+  return /\b(saldo\s+(do\s+dia|anterior|atual|final|inicial|dispon[ií]vel)|total\s+(de\s+)?(cr[eé]ditos|d[eé]bitos)|extrato|p[aá]gina|lan[çc]amentos|recentes|futuros|filtrar)\b/i.test(line);
 }
 
-const AMOUNT_RE_GLOBAL = /(-?\s*R?\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})/g;
+function isLikelyTransactionTitle(line: string): boolean {
+  return /\b(pix|ted|doc|boleto|proventos?|ordem\s+de\s+cr[eé]dito|cr[eé]dito|d[eé]bito|tarifa|saque|dep[oó]sito|transfer[eê]ncia)\b/i.test(line);
+}
+
+const AMOUNT_RE_GLOBAL = /([-−–—]?\s*R?\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}|[-−–—]?\d+,\d{2})/g;
 const DATE_INLINE_RE = /\b(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{1,2}\s+(?:de\s+)?[a-zç]{3,}\.?(?:\s*[-–]\s*\d{2,4}|\s+(?:de\s+)?\d{2,4})?)\b/i;
 
-function parseExtratoFromText(text: string): RawTx[] {
+export function parseExtratoFromText(text: string): RawTx[] {
   const txs: RawTx[] = [];
   const yearNow = new Date().getFullYear();
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
@@ -230,12 +234,13 @@ function parseExtratoFromText(text: string): RawTx[] {
   // depois cada bloco transação tem descrição (1+ linhas) + valor "-R$ 10,00"
   let currentDate: string | null = null;
   let buffer: string[] = [];
+  let pendingAmountLine: string | null = null;
 
   const flushBuffer = (amountLine: string) => {
     if (!currentDate) return;
     const amt = parseBrAmount(amountLine.match(AMOUNT_RE_GLOBAL)?.[0] ?? "");
     if (!amt) return;
-    const hasMinusBeforeAmount = /-\s*R?\$?\s*\d/.test(amountLine);
+    const hasMinusBeforeAmount = /[-−–—]\s*R?\$?\s*\d/.test(amountLine);
     const desc = buffer.join(" ").replace(/\s+/g, " ").trim();
     if (!desc) return;
     if (isLikelyHeaderOrBalance(desc)) return;
@@ -251,14 +256,35 @@ function parseExtratoFromText(text: string): RawTx[] {
   };
 
   for (const line of lines) {
-    // 0) Linhas de saldo/cabeçalho — ignorar SEMPRE (mesmo com valor)
+    const amounts = line.match(AMOUNT_RE_GLOBAL);
+    const dmatch = line.match(DATE_INLINE_RE);
+
+    // OCR mobile às vezes vem: título, valor, nome. Se uma nova transação/data
+    // começou, fecha o bloco anterior antes de processar a linha atual.
+    if (pendingAmountLine && (dmatch || isLikelyHeaderOrBalance(line) || isLikelyTransactionTitle(line))) {
+      flushBuffer(pendingAmountLine);
+      buffer = [];
+      pendingAmountLine = null;
+    }
+
+    // 0) cabeçalho de data multi-linha antes do filtro de saldo, pois apps
+    // podem OCRizar "Sex, 24 de abr - 2026 Saldo do dia R$ 0,88" em uma linha.
+    if (dmatch && /(saldo|sex|seg|ter|qua|qui|s[aá]b|sab|dom|de\s+[a-zç]{3})/i.test(line)) {
+      const nd = normalizeDate(dmatch[1], yearNow);
+      if (nd) {
+        currentDate = nd;
+        buffer = [];
+        continue;
+      }
+    }
+
+    // 1) Linhas de saldo/cabeçalho — ignorar SEMPRE (mesmo com valor)
     if (isLikelyHeaderOrBalance(line)) {
       continue;
     }
 
-    // 1) tenta inline: "10/04 PIX RECEBIDO JOAO 1.234,56 C"
+    // 2) tenta inline: "10/04 PIX RECEBIDO JOAO 1.234,56 C"
     const inlineDate = line.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+(.+)$/);
-    const amounts = line.match(AMOUNT_RE_GLOBAL);
     if (inlineDate && amounts && amounts.length > 0) {
       const dt = normalizeDate(inlineDate[1], yearNow);
       const lastAmt = amounts[amounts.length - 1];
@@ -272,7 +298,7 @@ function parseExtratoFromText(text: string): RawTx[] {
         let kind: "income" | "expense";
         if (ind === "c" || ind.startsWith("cr") || ind === "+") kind = "income";
         else if (ind === "d" || ind.startsWith("d") || ind === "-") kind = "expense";
-        else kind = inferKind(before, amt.isNegative, /-\s*R?\$?\s*\d/.test(line.slice(0, idx + lastAmt.length).slice(-15)));
+        else kind = inferKind(before, amt.isNegative, /[-−–—]\s*R?\$?\s*\d/.test(line.slice(0, idx + lastAmt.length).slice(-15)));
         if (!isLikelyHeaderOrBalance(before)) {
           txs.push({
             occurred_at: dt,
@@ -288,17 +314,6 @@ function parseExtratoFromText(text: string): RawTx[] {
       }
     }
 
-    // 2) cabeçalho de data multi-linha ("Sex, 24 de abr - 2026" ou "Qui, 23 de abr")
-    const dmatch = line.match(DATE_INLINE_RE);
-    if (dmatch && /saldo|sex|seg|ter|qua|qui|sab|dom|de\s+[a-z]{3}/i.test(line)) {
-      const nd = normalizeDate(dmatch[1], yearNow);
-      if (nd) {
-        currentDate = nd;
-        buffer = [];
-        continue;
-      }
-    }
-
     // 3) linha que CONTÉM apenas valor ou termina com valor — fecha bloco multi-linha
     if (amounts && amounts.length > 0 && currentDate && buffer.length > 0) {
       // remove o valor da linha; o que sobrar entra no buffer como descrição extra
@@ -306,8 +321,12 @@ function parseExtratoFromText(text: string): RawTx[] {
       const idx = line.lastIndexOf(lastAmt);
       const beforeAmt = line.slice(0, idx).trim();
       if (beforeAmt && !isLikelyHeaderOrBalance(beforeAmt)) buffer.push(beforeAmt);
-      flushBuffer(lastAmt);
-      buffer = [];
+      if (beforeAmt) {
+        flushBuffer(lastAmt);
+        buffer = [];
+      } else {
+        pendingAmountLine = lastAmt;
+      }
       continue;
     }
 
@@ -317,14 +336,53 @@ function parseExtratoFromText(text: string): RawTx[] {
     }
   }
 
+  if (pendingAmountLine) {
+    flushBuffer(pendingAmountLine);
+  }
+
   return txs;
 }
 
+function normalizeAiTransactions(parsed: unknown, model: string): ExtractionResult | null {
+  if (!parsed || typeof parsed !== "object") return null;
+  const p = parsed as Record<string, unknown>;
+  const txsRaw = Array.isArray(p.transactions) ? (p.transactions as unknown[]) : [];
+  const transactions: RawTx[] = [];
+  for (const t of txsRaw) {
+    if (!t || typeof t !== "object") continue;
+    const r = t as Record<string, unknown>;
+    const amount = Number(r.amount);
+    const k = r.kind === "income" ? "income" : "expense";
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    transactions.push({
+      occurred_at: typeof r.occurred_at === "string" ? r.occurred_at : null,
+      description: String(r.description ?? "").trim(),
+      amount: Math.abs(amount),
+      kind: k,
+      category_hint: typeof r.category_hint === "string" ? r.category_hint : null,
+      confidence: typeof r.confidence === "number" ? r.confidence : null,
+    });
+  }
+  console.log("[import-engine] vision JSON parsed", { model, txCount: transactions.length, bank_hint: p.bank_hint });
+  return {
+    method: "image_ai",
+    bank_hint: typeof p.bank_hint === "string" ? p.bank_hint : null,
+    account_hint: typeof p.account_hint === "string" ? p.account_hint : null,
+    period_start: typeof p.period_start === "string" ? p.period_start : null,
+    period_end: typeof p.period_end === "string" ? p.period_end : null,
+    opening_balance: typeof p.opening_balance === "number" ? p.opening_balance : null,
+    closing_balance: typeof p.closing_balance === "number" ? p.closing_balance : null,
+    transactions,
+    errors: Array.isArray(p.errors) ? (p.errors as string[]) : [],
+    raw: { vision_json: parsed },
+  };
+}
+
 /**
- * Extrai um extrato bancário de uma imagem/print usando IA multimodal.
- * Estratégia: gemini-2.5-flash; se baixa confiança, fallback para gemini-2.5-pro.
+ * Extrai extrato bancário de imagem/print em 3 etapas obrigatórias:
+ * A) Vision JSON direto; B) OCR livre; C) parser brasileiro determinístico sobre o OCR.
  */
-export async function extractBankStatementFromImage(opts: {
+export async function extractBankStatementHybridFromImage(opts: {
   fileBytes: Uint8Array;
   mime: string;
   filename: string;
@@ -361,7 +419,7 @@ export async function extractBankStatementFromImage(opts: {
   ];
 
   const errorsCollected: string[] = [];
-  const tryModel = async (model: string): Promise<ExtractionResult | null> => {
+  const tryVisionJson = async (model: string): Promise<ExtractionResult | null> => {
     let content: string;
     try {
       content = await callGateway(model, messages, apiKey);
@@ -372,48 +430,19 @@ export async function extractBankStatementFromImage(opts: {
       return null;
     }
     const parsed = safeParseJson(content);
-    if (!parsed || typeof parsed !== "object") {
+    const normalized = normalizeAiTransactions(parsed, model);
+    if (!normalized) {
       const preview = content.slice(0, 500).replace(/\s+/g, " ");
       const msg = `${model}: parse JSON falhou (len=${content.length}, preview 500ch: ${preview})`;
       console.error("[import-engine] PARSE FAILED", { model, len: content.length, preview });
       errorsCollected.push(msg);
       return null;
     }
-    const p = parsed as Record<string, unknown>;
-    const txsRaw = Array.isArray(p.transactions) ? (p.transactions as unknown[]) : [];
-    const transactions: RawTx[] = [];
-    for (const t of txsRaw) {
-      if (!t || typeof t !== "object") continue;
-      const r = t as Record<string, unknown>;
-      const amount = Number(r.amount);
-      const k = r.kind === "income" ? "income" : "expense";
-      if (!Number.isFinite(amount) || amount === 0) continue;
-      transactions.push({
-        occurred_at: typeof r.occurred_at === "string" ? r.occurred_at : null,
-        description: String(r.description ?? "").trim(),
-        amount: Math.abs(amount),
-        kind: k,
-        category_hint: typeof r.category_hint === "string" ? r.category_hint : null,
-        confidence: typeof r.confidence === "number" ? r.confidence : null,
-      });
-    }
-    console.log("[import-engine] PARSED OK", { model, txCount: transactions.length, bank_hint: p.bank_hint });
-    return {
-      method: "image_ai",
-      bank_hint: typeof p.bank_hint === "string" ? p.bank_hint : null,
-      account_hint: typeof p.account_hint === "string" ? p.account_hint : null,
-      period_start: typeof p.period_start === "string" ? p.period_start : null,
-      period_end: typeof p.period_end === "string" ? p.period_end : null,
-      opening_balance: typeof p.opening_balance === "number" ? p.opening_balance : null,
-      closing_balance: typeof p.closing_balance === "number" ? p.closing_balance : null,
-      transactions,
-      errors: Array.isArray(p.errors) ? (p.errors as string[]) : [],
-      raw: parsed,
-    };
+    return normalized;
   };
 
-  // 1ª tentativa: Flash
-  let result = await tryModel("google/gemini-2.5-flash");
+  // A) Vision JSON direto — tenta estruturar, mas não depende exclusivamente disso.
+  let result = await tryVisionJson("google/gemini-2.5-flash");
 
   // Avalia confidence média; se baixa ou vazia, tenta Pro
   const avgConf = result && result.transactions.length > 0
@@ -421,59 +450,100 @@ export async function extractBankStatementFromImage(opts: {
     : 0;
 
   if (!result || result.transactions.length === 0 || avgConf < 0.55) {
-    const pro = await tryModel("google/gemini-2.5-pro");
+    const pro = await tryVisionJson("google/gemini-2.5-pro");
     if (pro && pro.transactions.length > 0) {
       result = pro;
     }
   }
 
-  // Fallback: OCR livre + parser regex se nada estruturado
-  if (!result || result.transactions.length === 0) {
-    console.warn("[import-engine] FALLBACK: tentando OCR livre + regex");
-    try {
-      const ocrText = await ocrFreeText({ base64, mime, apiKey });
-      console.log("[import-engine] OCR text length", { len: ocrText.length, preview: ocrText.slice(0, 300) });
-      if (ocrText.trim().length > 0) {
-        const regexTxs = parseExtratoFromText(ocrText);
-        console.log("[import-engine] regex parser", { extracted: regexTxs.length });
-        if (regexTxs.length > 0) {
-          return {
-            method: "ai_fallback",
-            transactions: regexTxs,
-            errors: [
-              ...errorsCollected,
-              `Fallback OCR+regex usado (${regexTxs.length} lançamento(s) detectados).`,
-            ],
-            raw: { ocr_preview: ocrText.slice(0, 1000) },
-          };
-        }
-        errorsCollected.push(
-          `OCR retornou ${ocrText.length} caracteres mas o parser regex não encontrou linhas no formato esperado. Preview: ${ocrText.slice(0, 300)}`,
-        );
-      } else {
-        errorsCollected.push("OCR retornou texto vazio.");
-      }
-    } catch (e) {
-      const msg = `Fallback OCR falhou: ${e instanceof Error ? e.message : String(e)}`;
-      console.error("[import-engine]", msg);
-      errorsCollected.push(msg);
-    }
+  // B) OCR livre obrigatório + C) parser determinístico brasileiro sobre o OCR.
+  let ocrText = "";
+  try {
+    ocrText = await ocrFreeText({ base64, mime, apiKey });
+    console.log("[import-engine] OCR bruto", { len: ocrText.length, preview: ocrText.slice(0, 500) });
+  } catch (e) {
+    const msg = `OCR livre falhou: ${e instanceof Error ? e.message : String(e)}`;
+    console.error("[import-engine]", msg);
+    errorsCollected.push(msg);
   }
 
-  if (!result) {
+  if (ocrText.trim().length > 0) {
+    const parserTxs = parseExtratoFromText(ocrText);
+    console.log("[import-engine] parser brasileiro", { extracted: parserTxs.length, total_count: parserTxs.length });
+    if (parserTxs.length > 0) {
+      return {
+        ...(result ?? {}),
+        method: result && result.transactions.length > 0 ? "image_ai" : "ai_fallback",
+        transactions: parserTxs,
+        errors: [
+          ...(result?.errors ?? []),
+          ...errorsCollected,
+          `Parser OCR brasileiro usado (${parserTxs.length} lançamento(s) detectados).`,
+        ],
+        raw: {
+          ...(typeof result?.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
+          ocr_text: ocrText,
+          parser_count: parserTxs.length,
+        },
+      };
+    }
+    errorsCollected.push(
+      `OCR retornou texto, mas o parser identificou 0 lançamentos. OCR preview: ${ocrText.slice(0, 500)}`,
+    );
+    console.error("[import-engine] parser brasileiro ERROS", {
+      parser_count: 0,
+      ocr_preview: ocrText.slice(0, 500),
+    });
+    return {
+      method: "image_ai",
+      transactions: [],
+      errors: errorsCollected,
+      raw: {
+        ...(typeof result?.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
+        ocr_text: ocrText,
+        parser_count: 0,
+        parser_errors: errorsCollected,
+      },
+    };
+  } else {
+    errorsCollected.push("OCR livre retornou texto vazio.");
+  }
+
+  if (!result || result.transactions.length === 0) {
     return {
       method: "image_ai",
       transactions: [],
       errors: errorsCollected.length > 0
         ? errorsCollected
         : ["A IA não conseguiu estruturar este documento. Tente um print mais legível."],
+      raw: {
+        ocr_text: ocrText,
+        parser_count: 0,
+        parser_errors: errorsCollected,
+      },
     };
   }
   // Anexa erros coletados também quando algum modelo deu certo no fim
   if (errorsCollected.length > 0) {
-    result = { ...result, errors: [...(result.errors ?? []), ...errorsCollected] };
+    result = {
+      ...result,
+      errors: [...(result.errors ?? []), ...errorsCollected],
+      raw: {
+        ...(typeof result.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
+        ocr_text: ocrText,
+        parser_count: 0,
+      },
+    };
   }
   return result;
+}
+
+export async function extractBankStatementFromImage(opts: {
+  fileBytes: Uint8Array;
+  mime: string;
+  filename: string;
+}): Promise<ExtractionResult> {
+  return extractBankStatementHybridFromImage(opts);
 }
 
 // ============================================================
