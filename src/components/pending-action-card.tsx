@@ -389,15 +389,30 @@ export function PendingActionCard({
               <div className="grid grid-cols-1 gap-2 rounded-xl border border-border/30 bg-muted/10 p-3 sm:grid-cols-2">
                 {fields.map((f) => {
                   const value = toInputValue(merged[f.key], f.type);
+                  const edited = editedKeys.has(f.key);
+                  const missing = f.required && isEmptyValue(merged[f.key]);
                   if (!editing) {
                     const display =
                       f.type === "number" && typeof merged[f.key] === "number"
                         ? fmtCurrency(merged[f.key])
                         : value || "—";
                     return (
-                      <div key={f.key}>
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{f.label}</div>
-                        <div className="text-[12px] font-medium text-foreground">{display}</div>
+                      <div
+                        key={f.key}
+                        className={cn(
+                          "rounded-md px-1.5 py-1 -mx-1.5 -my-1",
+                          edited && "bg-amber-500/10 ring-1 ring-amber-500/40",
+                          missing && "ring-1 ring-destructive/50",
+                        )}
+                      >
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          {f.label}
+                          {f.required && <span className="ml-0.5 text-destructive">*</span>}
+                          {edited && <span className="ml-1 text-amber-600 dark:text-amber-400">· editado</span>}
+                        </div>
+                        <div className={cn("text-[12px] font-medium", missing ? "text-destructive" : "text-foreground")}>
+                          {missing ? "obrigatório" : display}
+                        </div>
                       </div>
                     );
                   }
@@ -405,6 +420,8 @@ export function PendingActionCard({
                     <div key={f.key} className="space-y-1">
                       <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
                         {f.label}
+                        {f.required && <span className="ml-0.5 text-destructive">*</span>}
+                        {edited && <span className="ml-1 text-amber-600 dark:text-amber-400">· editado</span>}
                       </Label>
                       <Input
                         type={f.type === "number" ? "number" : f.type === "month" ? "month" : f.type === "date" ? "date" : "text"}
@@ -413,7 +430,11 @@ export function PendingActionCard({
                         onChange={(e) =>
                           setOverrides((prev) => ({ ...prev, [f.key]: fromInputValue(e.target.value, f.type) }))
                         }
-                        className="h-8 text-[12px]"
+                        className={cn(
+                          "h-8 text-[12px]",
+                          edited && "border-amber-500/60 bg-amber-500/5",
+                          missing && "border-destructive/60 bg-destructive/5",
+                        )}
                       />
                     </div>
                   );
