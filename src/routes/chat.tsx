@@ -490,7 +490,7 @@ function ChatPage() {
                 await persistMessage(
                   convId!,
                   "assistant",
-                  `Nenhum lançamento identificado no extrato.`,
+                  `Não foi possível renderizar o card de importação: a API retornou ok:true, mas a sessão ${r.sessionId} veio com total_count=${summary.totalCount}.`,
                   [],
                 );
                 return false;
