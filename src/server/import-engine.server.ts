@@ -458,7 +458,8 @@ export async function extractBankStatementHybridFromImage(opts: {
       result = pro;
     }
   }
-  console.log("[IMPORT_DEBUG] AI_RAW", aiRawByModel);
+  const aiRaw = aiRawByModel;
+  console.log("[IMPORT_DEBUG] AI_RAW", aiRaw);
 
   // B) OCR livre obrigatório + C) parser determinístico brasileiro sobre o OCR.
   let ocrText = "";
@@ -477,26 +478,26 @@ export async function extractBankStatementHybridFromImage(opts: {
   const deterministicText = [ocrText, ...Object.values(aiRawByModel)].filter((s) => s.trim().length > 0).join("\n\n--- AI_RAW ---\n\n");
 
   if (deterministicText.trim().length > 0) {
-    const parserTxs = parseExtratoFromText(deterministicText);
-    console.log("[IMPORT_DEBUG] REGEX_TXS", parserTxs);
-    console.log("[import-engine] parser brasileiro", { extracted: parserTxs.length, total_count: parserTxs.length });
-    if (parserTxs.length > 0) {
+    const regexTxs = parseExtratoFromText(deterministicText);
+    console.log("[IMPORT_DEBUG] REGEX_TXS", regexTxs);
+    console.log("[import-engine] parser brasileiro", { extracted: regexTxs.length, total_count: regexTxs.length });
+    if (regexTxs.length > 0) {
       return {
         ...(result ?? {}),
         method: result && result.transactions.length > 0 ? "image_ai" : "ai_fallback",
-        transactions: parserTxs,
+        transactions: regexTxs,
         errors: [
           ...(result?.errors ?? []),
           ...errorsCollected,
-          `Parser OCR brasileiro usado (${parserTxs.length} lançamento(s) detectados).`,
+          `Parser OCR brasileiro usado (${regexTxs.length} lançamento(s) detectados).`,
         ],
         raw: {
           ...(typeof result?.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
           ocr_text: ocrText,
           ocr_fallback_raw: ocrFallbackRaw,
           ai_raw: aiRawByModel,
-          parser_count: parserTxs.length,
-          regex_count: parserTxs.length,
+          parser_count: regexTxs.length,
+          regex_count: regexTxs.length,
         },
       };
     }
