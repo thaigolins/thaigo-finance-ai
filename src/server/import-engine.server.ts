@@ -214,13 +214,13 @@ function normalizeDate(dateStr: string, yearHint: number): string | null {
 }
 
 function isLikelyHeaderOrBalance(line: string): boolean {
-  return /\b(saldo\s+(do\s+dia|anterior|atual|final|inicial|dispon[ií]vel)|total\s+(de\s+)?(cr[eé]ditos|d[eé]bitos)|extrato|p[aá]gina|lan[çc]amentos|recentes|futuros)\b/i.test(line);
+  return /\b(saldo\s+(do\s+dia|anterior|atual|final|inicial|dispon[ií]vel)|total\s+(de\s+)?(cr[eé]ditos|d[eé]bitos)|extrato|p[aá]gina|lan[çc]amentos|recentes|futuros|filtrar)\b/i.test(line);
 }
 
 const AMOUNT_RE_GLOBAL = /(-?\s*R?\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})/g;
 const DATE_INLINE_RE = /\b(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{1,2}\s+(?:de\s+)?[a-zç]{3,}\.?(?:\s*[-–]\s*\d{2,4}|\s+(?:de\s+)?\d{2,4})?)\b/i;
 
-function parseExtratoFromText(text: string): RawTx[] {
+export function parseExtratoFromText(text: string): RawTx[] {
   const txs: RawTx[] = [];
   const yearNow = new Date().getFullYear();
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
@@ -251,14 +251,27 @@ function parseExtratoFromText(text: string): RawTx[] {
   };
 
   for (const line of lines) {
-    // 0) Linhas de saldo/cabeçalho — ignorar SEMPRE (mesmo com valor)
+    const amounts = line.match(AMOUNT_RE_GLOBAL);
+
+    // 0) cabeçalho de data multi-linha antes do filtro de saldo, pois apps
+    // podem OCRizar "Sex, 24 de abr - 2026 Saldo do dia R$ 0,88" em uma linha.
+    const dmatch = line.match(DATE_INLINE_RE);
+    if (dmatch && /(saldo|sex|seg|ter|qua|qui|s[aá]b|sab|dom|de\s+[a-zç]{3})/i.test(line)) {
+      const nd = normalizeDate(dmatch[1], yearNow);
+      if (nd) {
+        currentDate = nd;
+        buffer = [];
+        continue;
+      }
+    }
+
+    // 1) Linhas de saldo/cabeçalho — ignorar SEMPRE (mesmo com valor)
     if (isLikelyHeaderOrBalance(line)) {
       continue;
     }
 
-    // 1) tenta inline: "10/04 PIX RECEBIDO JOAO 1.234,56 C"
+    // 2) tenta inline: "10/04 PIX RECEBIDO JOAO 1.234,56 C"
     const inlineDate = line.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+(.+)$/);
-    const amounts = line.match(AMOUNT_RE_GLOBAL);
     if (inlineDate && amounts && amounts.length > 0) {
       const dt = normalizeDate(inlineDate[1], yearNow);
       const lastAmt = amounts[amounts.length - 1];
@@ -285,17 +298,6 @@ function parseExtratoFromText(text: string): RawTx[] {
           buffer = [];
           continue;
         }
-      }
-    }
-
-    // 2) cabeçalho de data multi-linha ("Sex, 24 de abr - 2026" ou "Qui, 23 de abr")
-    const dmatch = line.match(DATE_INLINE_RE);
-    if (dmatch && /saldo|sex|seg|ter|qua|qui|sab|dom|de\s+[a-z]{3}/i.test(line)) {
-      const nd = normalizeDate(dmatch[1], yearNow);
-      if (nd) {
-        currentDate = nd;
-        buffer = [];
-        continue;
       }
     }
 
