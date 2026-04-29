@@ -211,6 +211,7 @@ function ReviewPage() {
           ids,
           bankAccountId: bankAccountId ?? undefined,
           allowDuplicates: allowDup,
+          token: await getToken(),
         },
       });
       if (!r.ok) {
