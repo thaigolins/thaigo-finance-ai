@@ -503,11 +503,16 @@ function ChatPage() {
         } catch (err) {
           console.error("extract error", err);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const reason = (err as any)?.message || String(err) || "DEBUG v2: erro sem message no catch";
+          const e = err as any;
+          const status = e?.status ?? e?.response?.status;
+          const isAuth = status === 401 || /unauthor|not authenticated|jwt/i.test(String(e?.message ?? ""));
+          const reason = isAuth
+            ? "Sessão expirada. Faça login novamente."
+            : (e?.message || String(err) || "erro desconhecido");
           await persistMessage(
             convId!,
             "assistant",
-            `DEBUG v2 · Falha ao processar **${att.filename}** com IA. Motivo real: ${reason}`,
+            `Falha ao processar **${att.filename}**: ${reason}`,
             [],
           );
           return false;
