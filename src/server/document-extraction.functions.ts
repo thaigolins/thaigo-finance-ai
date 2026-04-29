@@ -36,10 +36,6 @@ const ExtractInput = z.object({
 
 type Kind = z.infer<typeof KindSchema>;
 
-// ============= Schemas de cada tipo de documento =============
-// Estes schemas definem a forma estruturada que pedimos ao modelo retornar.
-// O retorno real é validado de forma tolerante (best-effort).
-
 const schemaPrompts: Record<Kind, string> = {
   fatura: `Extraia da fatura de cartão de crédito (PDF/imagem) o seguinte JSON:
 {
@@ -156,16 +152,13 @@ Retorne APENAS o JSON. Nada mais.`;
   ];
 }
 
-// Best-effort JSON parser: aceita resposta com cercas markdown ou texto extra.
 function safeParseJson(s: string): unknown {
   const trimmed = s.trim();
-  // Remove cercas markdown se houver
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
   const candidate = fenced ? fenced[1].trim() : trimmed;
   try {
     return JSON.parse(candidate);
   } catch {
-    // Tenta achar o primeiro { ... } balanceado
     const first = candidate.indexOf("{");
     const last = candidate.lastIndexOf("}");
     if (first >= 0 && last > first) {
@@ -201,6 +194,33 @@ function buildHumanSummary(kind: Kind, payload: Record<string, unknown>): string
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function logAudit(supabase: any, params: {
+  userId: string;
+  action: "extract" | "confirm" | "discard" | "duplicate_detected" | "partial_confirm" | "edit_before_confirm";
+  docKind?: Kind | null;
+  pendingId?: string | null;
+  status?: "success" | "error" | "warning";
+  message?: string;
+  before?: unknown;
+  after?: unknown;
+}) {
+  try {
+    await supabase.from("ai_audit_logs").insert({
+      user_id: params.userId,
+      action: params.action,
+      doc_kind: params.docKind ?? null,
+      pending_action_id: params.pendingId ?? null,
+      status: params.status ?? "success",
+      message: params.message ?? null,
+      before_data: params.before ?? null,
+      after_data: params.after ?? null,
+    });
+  } catch (e) {
+    console.error("audit log failed", e);
+  }
+}
+
 export const extractDocument = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => ExtractInput.parse(d))
@@ -210,20 +230,15 @@ export const extractDocument = createServerFn({ method: "POST" })
     const supabase = sbTyped as any;
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) {
-      return {
-        ok: false as const,
-        error: "LOVABLE_API_KEY ausente. Configure o gateway de IA.",
-      };
+      return { ok: false as const, error: "LOVABLE_API_KEY ausente. Configure o gateway de IA." };
     }
 
-    // 1) Baixa o arquivo do Storage privado (RLS aplicada)
     const dl = await supabase.storage.from(data.bucket).download(data.path);
     if (dl.error || !dl.data) {
       return { ok: false as const, error: `Falha ao ler arquivo: ${dl.error?.message ?? "desconhecido"}` };
     }
     const arrayBuffer = await dl.data.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
-    // Conversão eficiente para base64
     let binary = "";
     const chunk = 0x8000;
     for (let i = 0; i < bytes.length; i += chunk) {
@@ -231,22 +246,14 @@ export const extractDocument = createServerFn({ method: "POST" })
     }
     const base64 = btoa(binary);
 
-    // Tamanho máximo razoável (~8MB de base64 ~ 6MB binário)
     if (base64.length > 8_500_000) {
-      return {
-        ok: false as const,
-        error: "Arquivo muito grande para leitura por IA (máx ~6MB).",
-      };
+      return { ok: false as const, error: "Arquivo muito grande para leitura por IA (máx ~6MB)." };
     }
 
-    // 2) Chama o gateway com mensagem multimodal
     const messages = buildExtractionMessages(data.kind, base64, data.mime, data.filename);
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages,
@@ -258,11 +265,7 @@ export const extractDocument = createServerFn({ method: "POST" })
     if (!res.ok) {
       const status = res.status;
       let detail = "";
-      try {
-        detail = await res.text();
-      } catch {
-        /* ignore */
-      }
+      try { detail = await res.text(); } catch { /* ignore */ }
       console.error("Extraction gateway error", status, detail);
       if (status === 429) return { ok: false as const, error: "Limite de uso atingido. Aguarde e tente novamente." };
       if (status === 402) return { ok: false as const, error: "Créditos do gateway de IA esgotados." };
@@ -279,7 +282,6 @@ export const extractDocument = createServerFn({ method: "POST" })
     const payload = parsed as Record<string, unknown>;
     const summary = buildHumanSummary(data.kind, payload);
 
-    // 3) Grava como pending_ai_action (aguardando confirmação)
     const insert = await supabase
       .from("pending_ai_actions")
       .insert({
@@ -299,9 +301,20 @@ export const extractDocument = createServerFn({ method: "POST" })
       return { ok: false as const, error: `Falha ao salvar sugestão: ${insert.error.message}` };
     }
 
+    const pendingId = (insert.data as { id: string }).id;
+
+    await logAudit(supabase, {
+      userId,
+      action: "extract",
+      docKind: data.kind,
+      pendingId,
+      message: summary,
+      after: payload,
+    });
+
     return {
       ok: true as const,
-      pendingId: (insert.data as { id: string }).id,
+      pendingId,
       kind: data.kind,
       summary,
       payload: payload as Record<string, unknown> & { [k: string]: unknown },
@@ -316,13 +329,146 @@ export const extractDocument = createServerFn({ method: "POST" })
   });
 
 // ============================================================
+// Detecção de duplicidade
+// ============================================================
+
+const DuplicateInput = z.object({
+  pendingId: z.string().uuid(),
+  overrides: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const checkDuplicate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => DuplicateInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase: sbTyped, userId } = context;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = sbTyped as any;
+
+    const { data: pending } = await supabase
+      .from("pending_ai_actions")
+      .select("kind, payload, source_file_id")
+      .eq("id", data.pendingId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!pending) return { ok: true as const, duplicates: [] };
+
+    const kind = (pending as { kind: Kind }).kind;
+    const p = {
+      ...((pending as { payload: Record<string, unknown> }).payload ?? {}),
+      ...(data.overrides ?? {}),
+    } as Record<string, unknown>;
+
+    const duplicates: { table: string; id: string; reason: string }[] = [];
+
+    try {
+      if (kind === "fatura") {
+        const refMonth = String(p.reference_month ?? "").slice(0, 10);
+        const total = Number(p.total_amount ?? 0);
+        const last = String(p.card_last_digits ?? "");
+        if (refMonth && last) {
+          const { data: cards } = await supabase
+            .from("credit_cards").select("id").eq("last_digits", last).limit(5);
+          const cardIds = (cards as { id: string }[] | null)?.map((c) => c.id) ?? [];
+          if (cardIds.length > 0) {
+            const { data: invs } = await supabase
+              .from("invoices")
+              .select("id, total_amount, reference_month, credit_card_id")
+              .in("credit_card_id", cardIds)
+              .eq("reference_month", refMonth);
+            for (const inv of (invs as { id: string; total_amount: number }[] | null) ?? []) {
+              const diff = Math.abs(Number(inv.total_amount) - total);
+              if (diff < Math.max(1, total * 0.02)) {
+                duplicates.push({ table: "invoices", id: inv.id, reason: `Já existe fatura ${refMonth.slice(0,7)} com total similar` });
+              }
+            }
+          }
+        }
+      } else if (kind === "extrato") {
+        const bank = String(p.bank ?? "");
+        const from = String(p.period_from ?? "");
+        const to = String(p.period_to ?? "");
+        if (bank && from) {
+          const { data: accs } = await supabase
+            .from("bank_accounts").select("id").ilike("bank", bank).limit(5);
+          const accIds = (accs as { id: string }[] | null)?.map((a) => a.id) ?? [];
+          if (accIds.length > 0 && to) {
+            const { data: txs } = await supabase
+              .from("bank_transactions")
+              .select("id")
+              .in("bank_account_id", accIds)
+              .gte("occurred_at", from)
+              .lte("occurred_at", to)
+              .limit(1);
+            if (txs && txs.length > 0) {
+              duplicates.push({ table: "bank_transactions", id: accIds[0], reason: `Já há lançamentos em ${bank} entre ${from} e ${to}` });
+            }
+          }
+        }
+      } else if (kind === "fgts") {
+        const employer = String(p.employer ?? "");
+        const lastMov = String(p.last_movement ?? "");
+        if (employer) {
+          const q = supabase.from("fgts_accounts").select("id, last_movement").ilike("employer", employer);
+          const { data: rows } = await q.limit(5);
+          for (const r of (rows as { id: string; last_movement: string | null }[] | null) ?? []) {
+            if (!lastMov || r.last_movement === lastMov) {
+              duplicates.push({ table: "fgts_accounts", id: r.id, reason: `Já existe conta FGTS de ${employer}` });
+            }
+          }
+        }
+      } else if (kind === "emprestimo") {
+        const inst = String(p.institution ?? "");
+        const balance = Number(p.current_balance ?? 0);
+        const parcela = Number(p.monthly_payment ?? 0);
+        if (inst) {
+          const { data: rows } = await supabase
+            .from("loan_accounts").select("id, current_balance, monthly_payment").ilike("institution", inst).limit(10);
+          for (const r of (rows as { id: string; current_balance: number; monthly_payment: number }[] | null) ?? []) {
+            const sameBal = Math.abs(Number(r.current_balance) - balance) < Math.max(50, balance * 0.05);
+            const samePar = Math.abs(Number(r.monthly_payment) - parcela) < Math.max(5, parcela * 0.05);
+            if (sameBal && samePar) {
+              duplicates.push({ table: "loan_accounts", id: r.id, reason: `Já há empréstimo em ${inst} com saldo/parcela similar` });
+            }
+          }
+        }
+      } else if (kind === "contracheque") {
+        const employer = String(p.employer ?? "");
+        const ref = String(p.reference_month ?? "").slice(0, 10);
+        if (employer && ref) {
+          const { data: rows } = await supabase
+            .from("payslips").select("id").ilike("employer", employer).eq("reference_month", ref).limit(1);
+          if (rows && rows.length > 0) {
+            duplicates.push({ table: "payslips", id: (rows[0] as { id: string }).id, reason: `Já existe contracheque de ${employer} em ${ref.slice(0,7)}` });
+          }
+        }
+      }
+    } catch (e) {
+      console.error("checkDuplicate error", e);
+    }
+
+    if (duplicates.length > 0) {
+      await logAudit(supabase, {
+        userId, action: "duplicate_detected", docKind: kind, pendingId: data.pendingId,
+        status: "warning", message: duplicates.map((d) => d.reason).join(" | "),
+        after: duplicates,
+      });
+    }
+
+    return { ok: true as const, duplicates };
+  });
+
+// ============================================================
 // Confirmação: grava o payload nas tabelas finais
+// Suporta overrides (edição) e selectedIndices (confirmação parcial de lançamentos)
 // ============================================================
 
 const ConfirmInput = z.object({
   pendingId: z.string().uuid(),
-  // Permite o usuário ajustar o payload antes de confirmar
   overrides: z.record(z.string(), z.unknown()).optional(),
+  selectedTxIndices: z.array(z.number().int().min(0)).optional(),
+  ignoreDuplicate: z.boolean().optional(),
 });
 
 const num = (v: unknown, d = 0) => {
@@ -340,80 +486,64 @@ export const confirmPendingAction = createServerFn({ method: "POST" })
     const supabase = sbTyped as any;
 
     const { data: pending, error: pErr } = await supabase
-      .from("pending_ai_actions")
-      .select("*")
-      .eq("id", data.pendingId)
-      .eq("user_id", userId)
-      .maybeSingle();
+      .from("pending_ai_actions").select("*").eq("id", data.pendingId).eq("user_id", userId).maybeSingle();
 
-    if (pErr || !pending) {
-      return { ok: false as const, error: "Sugestão não encontrada." };
-    }
+    if (pErr || !pending) return { ok: false as const, error: "Sugestão não encontrada." };
     if ((pending as { status: string }).status !== "pending") {
       return { ok: false as const, error: "Esta sugestão já foi processada." };
     }
 
-    const p = {
-      ...((pending as { payload: Record<string, unknown> }).payload ?? {}),
-      ...(data.overrides ?? {}),
-    } as Record<string, unknown>;
+    const beforePayload = (pending as { payload: Record<string, unknown> }).payload ?? {};
+    const p = { ...beforePayload, ...(data.overrides ?? {}) } as Record<string, unknown>;
     const kind = (pending as { kind: Kind }).kind;
 
+    if (data.overrides && Object.keys(data.overrides).length > 0) {
+      await logAudit(supabase, {
+        userId, action: "edit_before_confirm", docKind: kind, pendingId: data.pendingId,
+        before: beforePayload, after: p,
+      });
+    }
+
     let createdSummary = "";
+    let partial = false;
 
     try {
       if (kind === "fatura") {
-        // Cria/encontra cartão pelos últimos 4 dígitos (best-effort)
         let cardId: string | null = null;
         const last = str(p.card_last_digits);
         if (last) {
           const { data: existing } = await supabase
-            .from("credit_cards")
-            .select("id")
-            .eq("last_digits", last)
-            .limit(1);
-          if (existing && existing.length > 0) {
-            cardId = (existing[0] as { id: string }).id;
-          }
+            .from("credit_cards").select("id").eq("last_digits", last).limit(1);
+          if (existing && existing.length > 0) cardId = (existing[0] as { id: string }).id;
         }
         if (!cardId) {
-          const { data: card, error } = await supabase
-            .from("credit_cards")
-            .insert({
-              user_id: userId,
-              name: `Cartão ${last || "novo"}`,
-              brand: str(p.card_brand, "other"),
-              last_digits: last || null,
-              credit_limit: 0,
-              closing_day: 1,
-              due_day: 10,
-            })
-            .select("id")
-            .single();
+          const { data: card, error } = await supabase.from("credit_cards").insert({
+            user_id: userId, name: `Cartão ${last || "novo"}`,
+            brand: str(p.card_brand, "other"), last_digits: last || null,
+            credit_limit: 0, closing_day: 1, due_day: 10,
+          }).select("id").single();
           if (error) throw error;
           cardId = (card as { id: string }).id;
         }
 
-        const { data: invoice, error: invErr } = await supabase
-          .from("invoices")
-          .insert({
-            user_id: userId,
-            credit_card_id: cardId,
-            reference_month: str(p.reference_month) || new Date().toISOString().slice(0, 10),
-            due_date: str(p.due_date) || new Date().toISOString().slice(0, 10),
-            total_amount: num(p.total_amount),
-            status: "open",
-          })
-          .select("id")
-          .single();
+        const { data: invoice, error: invErr } = await supabase.from("invoices").insert({
+          user_id: userId, credit_card_id: cardId,
+          reference_month: str(p.reference_month) || new Date().toISOString().slice(0, 10),
+          due_date: str(p.due_date) || new Date().toISOString().slice(0, 10),
+          total_amount: num(p.total_amount), status: "open",
+        }).select("id").single();
         if (invErr) throw invErr;
         const invoiceId = (invoice as { id: string }).id;
 
-        const txs = (p.transactions as Record<string, unknown>[] | undefined) ?? [];
+        let txs = (p.transactions as Record<string, unknown>[] | undefined) ?? [];
+        if (data.selectedTxIndices && data.selectedTxIndices.length > 0) {
+          const set = new Set(data.selectedTxIndices);
+          txs = txs.filter((_, i) => set.has(i));
+          partial = true;
+        }
         if (txs.length > 0) {
           const rows = txs.slice(0, 500).map((t) => ({
-            user_id: userId,
-            invoice_id: invoiceId,
+            user_id: userId, invoice_id: invoiceId,
             occurred_at: str(t.occurred_at) || new Date().toISOString().slice(0, 10),
             description: str(t.description, "Lançamento"),
             amount: num(t.amount),
@@ -422,39 +552,32 @@ export const confirmPendingAction = createServerFn({ method: "POST" })
           }));
           await supabase.from("invoice_transactions").insert(rows);
         }
-        createdSummary = `Fatura criada com ${txs.length} lançamentos.`;
+        createdSummary = `Fatura criada com ${txs.length} lançamentos${partial ? " (seleção parcial)" : ""}.`;
       } else if (kind === "extrato") {
-        // Encontra/cria conta pelo banco
         const bank = str(p.bank, "Banco");
         let accountId: string | null = null;
         const { data: existing } = await supabase
-          .from("bank_accounts")
-          .select("id")
-          .ilike("bank", bank)
-          .limit(1);
-        if (existing && existing.length > 0) {
-          accountId = (existing[0] as { id: string }).id;
-        } else {
-          const { data: acc, error } = await supabase
-            .from("bank_accounts")
-            .insert({
-              user_id: userId,
-              bank,
-              account_number: str(p.account_number) || null,
-              account_type: "checking",
-              balance: num(p.closing_balance),
-            })
-            .select("id")
-            .single();
+          .from("bank_accounts").select("id").ilike("bank", bank).limit(1);
+        if (existing && existing.length > 0) accountId = (existing[0] as { id: string }).id;
+        else {
+          const { data: acc, error } = await supabase.from("bank_accounts").insert({
+            user_id: userId, bank,
+            account_number: str(p.account_number) || null,
+            account_type: "checking", balance: num(p.closing_balance),
+          }).select("id").single();
           if (error) throw error;
           accountId = (acc as { id: string }).id;
         }
 
-        const txs = (p.transactions as Record<string, unknown>[] | undefined) ?? [];
+        let txs = (p.transactions as Record<string, unknown>[] | undefined) ?? [];
+        if (data.selectedTxIndices && data.selectedTxIndices.length > 0) {
+          const set = new Set(data.selectedTxIndices);
+          txs = txs.filter((_, i) => set.has(i));
+          partial = true;
+        }
         if (txs.length > 0) {
           const rows = txs.slice(0, 1000).map((t) => ({
-            user_id: userId,
-            bank_account_id: accountId,
+            user_id: userId, bank_account_id: accountId,
             occurred_at: str(t.occurred_at) || new Date().toISOString().slice(0, 10),
             description: str(t.description, "Lançamento"),
             amount: Math.abs(num(t.amount)),
@@ -462,22 +585,15 @@ export const confirmPendingAction = createServerFn({ method: "POST" })
           }));
           await supabase.from("bank_transactions").insert(rows);
         }
-        createdSummary = `Extrato importado: ${txs.length} lançamentos em ${bank}.`;
+        createdSummary = `Extrato importado: ${txs.length} lançamentos em ${bank}${partial ? " (seleção parcial)" : ""}.`;
       } else if (kind === "fgts") {
-        const { data: account, error } = await supabase
-          .from("fgts_accounts")
-          .insert({
-            user_id: userId,
-            employer: str(p.employer, "Empregador"),
-            cnpj: str(p.cnpj) || null,
-            status: str(p.status) === "inativa" ? "inativa" : "ativa",
-            balance: num(p.balance),
-            monthly_deposit: num(p.monthly_deposit),
-            jam_month: num(p.jam_month),
-            last_movement: str(p.last_movement) || null,
-          })
-          .select("id")
-          .single();
+        const { data: account, error } = await supabase.from("fgts_accounts").insert({
+          user_id: userId, employer: str(p.employer, "Empregador"),
+          cnpj: str(p.cnpj) || null,
+          status: str(p.status) === "inativa" ? "inativa" : "ativa",
+          balance: num(p.balance), monthly_deposit: num(p.monthly_deposit),
+          jam_month: num(p.jam_month), last_movement: str(p.last_movement) || null,
+        }).select("id").single();
         if (error) throw error;
         const accId = (account as { id: string }).id;
 
@@ -485,33 +601,21 @@ export const confirmPendingAction = createServerFn({ method: "POST" })
         if (entries.length > 0) {
           const validTypes = new Set(["deposito", "jam", "saque", "outro"]);
           const rows = entries.slice(0, 500).map((e) => ({
-            user_id: userId,
-            fgts_account_id: accId,
+            user_id: userId, fgts_account_id: accId,
             occurred_at: str(e.occurred_at) || new Date().toISOString().slice(0, 10),
             entry_type: validTypes.has(str(e.entry_type)) ? str(e.entry_type) : "outro",
-            amount: num(e.amount),
-            notes: str(e.notes) || null,
+            amount: num(e.amount), notes: str(e.notes) || null,
           }));
           await supabase.from("fgts_entries").insert(rows);
         }
         createdSummary = `Conta FGTS de ${str(p.employer)} criada.`;
       } else if (kind === "emprestimo") {
-        const validDebt = new Set([
-          "credito_pessoal",
-          "consignado",
-          "financiamento_imovel",
-          "financiamento_veiculo",
-          "cartao",
-          "cheque_especial",
-          "outros",
-        ]);
-        const validStatus = new Set(["em_dia", "atrasado", "quitado", "renegociado"]);
+        const validDebt = new Set(["credito_pessoal","consignado","financiamento_imovel","financiamento_veiculo","cartao","cheque_especial","outros"]);
+        const validStatus = new Set(["em_dia","atrasado","quitado","renegociado"]);
         const { error } = await supabase.from("loan_accounts").insert({
-          user_id: userId,
-          institution: str(p.institution, "Instituição"),
+          user_id: userId, institution: str(p.institution, "Instituição"),
           debt_type: validDebt.has(str(p.debt_type)) ? str(p.debt_type) : "outros",
-          original_amount: num(p.original_amount),
-          current_balance: num(p.current_balance),
+          original_amount: num(p.original_amount), current_balance: num(p.current_balance),
           interest_rate: num(p.interest_rate),
           cet: p.cet != null ? num(p.cet) : null,
           installments_total: Math.max(0, Math.floor(num(p.installments_total))),
@@ -525,15 +629,11 @@ export const confirmPendingAction = createServerFn({ method: "POST" })
         createdSummary = `Empréstimo ${str(p.institution)} adicionado.`;
       } else if (kind === "contracheque") {
         const { error } = await supabase.from("payslips").insert({
-          user_id: userId,
-          employer: str(p.employer, "Empregador"),
+          user_id: userId, employer: str(p.employer, "Empregador"),
           reference_month: str(p.reference_month) || new Date().toISOString().slice(0, 10),
-          gross_amount: num(p.gross_amount),
-          net_amount: num(p.net_amount),
-          inss: num(p.inss),
-          irrf: num(p.irrf),
-          fgts_amount: num(p.fgts_amount),
-          benefits: num(p.benefits),
+          gross_amount: num(p.gross_amount), net_amount: num(p.net_amount),
+          inss: num(p.inss), irrf: num(p.irrf),
+          fgts_amount: num(p.fgts_amount), benefits: num(p.benefits),
           notes: str(p.notes) || null,
         });
         if (error) throw error;
@@ -542,12 +642,23 @@ export const confirmPendingAction = createServerFn({ method: "POST" })
 
       await supabase
         .from("pending_ai_actions")
-        .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
+        .update({ status: "confirmed", confirmed_at: new Date().toISOString(), payload: p })
         .eq("id", data.pendingId);
+
+      await logAudit(supabase, {
+        userId,
+        action: partial ? "partial_confirm" : "confirm",
+        docKind: kind, pendingId: data.pendingId,
+        message: createdSummary, before: beforePayload, after: p,
+      });
 
       return { ok: true as const, summary: createdSummary };
     } catch (e) {
       const message = e instanceof Error ? e.message : "Erro ao gravar dados";
+      await logAudit(supabase, {
+        userId, action: "confirm", docKind: kind, pendingId: data.pendingId,
+        status: "error", message, before: beforePayload, after: p,
+      });
       return { ok: false as const, error: message };
     }
   });
@@ -556,12 +667,22 @@ export const discardPendingAction = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ pendingId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+    const { supabase: sbTyped, userId } = context;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = sbTyped as any;
+    const { data: pending } = await supabase
+      .from("pending_ai_actions").select("kind, payload").eq("id", data.pendingId).eq("user_id", userId).maybeSingle();
     const { error } = await supabase
       .from("pending_ai_actions")
       .update({ status: "discarded", discarded_at: new Date().toISOString() })
       .eq("id", data.pendingId)
       .eq("user_id", userId);
     if (error) return { ok: false as const, error: error.message };
+    await logAudit(supabase, {
+      userId, action: "discard",
+      docKind: (pending as { kind: Kind } | null)?.kind ?? null,
+      pendingId: data.pendingId,
+      before: (pending as { payload: unknown } | null)?.payload ?? null,
+    });
     return { ok: true as const };
   });
