@@ -424,16 +424,15 @@ function ChatPage() {
               return true;
             }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const reason = (r as any)?.error || "Falha ao processar extrato";
+            const reasonEx = (r as any)?.error || "Falha ao processar extrato";
             await persistMessage(
               convId!,
               "assistant",
-              `Não consegui extrair os dados de **${att.filename}**. Motivo: ${reason}`,
+              `Não consegui extrair os dados de **${att.filename}**. Motivo: ${reasonEx}`,
               [],
             );
             return false;
           }
-        try {
           const r = await extractDoc({
             data: {
               bucket: att.bucket as
