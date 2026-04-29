@@ -234,6 +234,7 @@ export function parseExtratoFromText(text: string): RawTx[] {
   // depois cada bloco transação tem descrição (1+ linhas) + valor "-R$ 10,00"
   let currentDate: string | null = null;
   let buffer: string[] = [];
+  let pendingAmountLine: string | null = null;
 
   const flushBuffer = (amountLine: string) => {
     if (!currentDate) return;
@@ -256,10 +257,18 @@ export function parseExtratoFromText(text: string): RawTx[] {
 
   for (const line of lines) {
     const amounts = line.match(AMOUNT_RE_GLOBAL);
+    const dmatch = line.match(DATE_INLINE_RE);
+
+    // OCR mobile às vezes vem: título, valor, nome. Se uma nova transação/data
+    // começou, fecha o bloco anterior antes de processar a linha atual.
+    if (pendingAmountLine && (dmatch || isLikelyHeaderOrBalance(line) || isLikelyTransactionTitle(line))) {
+      flushBuffer(pendingAmountLine);
+      buffer = [];
+      pendingAmountLine = null;
+    }
 
     // 0) cabeçalho de data multi-linha antes do filtro de saldo, pois apps
     // podem OCRizar "Sex, 24 de abr - 2026 Saldo do dia R$ 0,88" em uma linha.
-    const dmatch = line.match(DATE_INLINE_RE);
     if (dmatch && /(saldo|sex|seg|ter|qua|qui|s[aá]b|sab|dom|de\s+[a-zç]{3})/i.test(line)) {
       const nd = normalizeDate(dmatch[1], yearNow);
       if (nd) {
@@ -312,8 +321,12 @@ export function parseExtratoFromText(text: string): RawTx[] {
       const idx = line.lastIndexOf(lastAmt);
       const beforeAmt = line.slice(0, idx).trim();
       if (beforeAmt && !isLikelyHeaderOrBalance(beforeAmt)) buffer.push(beforeAmt);
-      flushBuffer(lastAmt);
-      buffer = [];
+      if (beforeAmt) {
+        flushBuffer(lastAmt);
+        buffer = [];
+      } else {
+        pendingAmountLine = lastAmt;
+      }
       continue;
     }
 
@@ -321,6 +334,10 @@ export function parseExtratoFromText(text: string): RawTx[] {
     if (!isLikelyHeaderOrBalance(line)) {
       buffer.push(line);
     }
+  }
+
+  if (pendingAmountLine) {
+    flushBuffer(pendingAmountLine);
   }
 
   return txs;
