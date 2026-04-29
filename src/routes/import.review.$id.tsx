@@ -183,6 +183,7 @@ function ReviewPage() {
             kind: patch.kind,
             category_id: patch.category_id ?? undefined,
           },
+          token: await getToken(),
         },
       });
       if (!r.ok) toast.error(r.error);
