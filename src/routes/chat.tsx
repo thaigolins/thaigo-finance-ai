@@ -352,9 +352,8 @@ function ChatPage() {
       invalidateMessages();
       invalidateConvs();
 
-      // ===== Extração automática de documentos suportados =====
-      // Mapeia kind do anexo -> kind do extrator
-      const extractorKind: Record<string, "fatura" | "extrato" | "fgts" | "emprestimo" | "contracheque"> = {
+      // ===== Extração de documentos =====
+      const extractorKindByAttKind: Record<string, "fatura" | "extrato" | "fgts" | "emprestimo" | "contracheque"> = {
         fatura: "fatura",
         extrato: "extrato",
         fgts: "fgts",
@@ -367,35 +366,45 @@ function ChatPage() {
         "payslips",
         "fgts-statements",
         "loan-contracts",
+        "images",
       ]);
-      let anyExtracted = false;
-      for (let i = 0; i < attachments.length; i++) {
-        const a = attachments[i];
-        const ek = extractorKind[a.kind];
-        if (!ek) continue;
-        if (!extractableBuckets.has(a.bucket as StorageBucket)) continue;
+
+      const runExtraction = async (
+        att: AttachmentMeta,
+        ek: "fatura" | "extrato" | "fgts" | "emprestimo" | "contracheque",
+        uploadedFileId?: string | null,
+      ): Promise<boolean> => {
+        if (!extractableBuckets.has(att.bucket as StorageBucket)) {
+          await persistMessage(
+            convId!,
+            "assistant",
+            `Não consegui acessar o anexo **${att.filename}** para extração (bucket não suportado).`,
+            [],
+          );
+          return false;
+        }
+        setProcessingAttachment(true);
         try {
           const r = await extractDoc({
             data: {
-              bucket: a.bucket as
+              bucket: att.bucket as
                 | "invoices"
                 | "bank-statements"
                 | "payslips"
                 | "fgts-statements"
                 | "loan-contracts"
                 | "images",
-              path: a.path,
-              filename: a.filename,
-              mime: a.mime || "application/pdf",
+              path: att.path,
+              filename: att.filename,
+              mime: att.mime || (att.bucket === "images" ? "image/jpeg" : "application/pdf"),
               kind: ek,
-              uploadedFileId: uploadedIds[i] ?? undefined,
-              conversationId: convId,
+              uploadedFileId: uploadedFileId ?? undefined,
+              conversationId: convId!,
             },
           });
           if (r.ok) {
-            anyExtracted = true;
-            const intro = `Li seu documento **${a.filename}** e extraí os dados. Revise a prévia abaixo e confirme para gravar no app.`;
-            await persistMessage(convId, "assistant", intro, [], {
+            const intro = `Li seu documento **${att.filename}** e extraí os dados como **${ek}**. Revise a prévia abaixo e confirme para gravar no app.`;
+            await persistMessage(convId!, "assistant", intro, [], {
               pendingAction: {
                 pendingId: r.pendingId,
                 kind: r.kind,
@@ -403,22 +412,86 @@ function ChatPage() {
                 payload: r.payload,
               },
             });
+            return true;
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const reason = (r as any)?.error || (r as any)?.message || "Falha ao processar documento";
+          await persistMessage(
+            convId!,
+            "assistant",
+            `Não consegui extrair os dados de **${att.filename}** automaticamente. Motivo: ${reason}\n\nVocê ainda pode lançar manualmente no módulo correspondente.`,
+            [],
+          );
+          return false;
+        } catch (err) {
+          console.error("extract error", err);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const reason = (err as any)?.message || "Falha ao processar documento";
+          await persistMessage(
+            convId!,
+            "assistant",
+            `Falha ao processar **${att.filename}** com IA. Motivo: ${reason}`,
+            [],
+          );
+          return false;
+        } finally {
+          setProcessingAttachment(false);
+        }
+      };
+
+      let anyExtracted = false;
+      const userWantsExtract = isExtractIntent(text);
+
+      // 1) Anexos novos: extrai automaticamente quando o tipo já é conhecido
+      //    Imagens só são extraídas se o usuário pedir explicitamente neste turno.
+      for (let i = 0; i < attachments.length; i++) {
+        const a = attachments[i];
+        const knownKind = extractorKindByAttKind[a.kind];
+        if (knownKind) {
+          const ok = await runExtraction(a, knownKind, uploadedIds[i]);
+          if (ok) anyExtracted = true;
+        } else if (a.kind === "imagem" && userWantsExtract) {
+          const ek = detectExtractorKind(text, a.kind);
+          if (ek) {
+            const ok = await runExtraction(a, ek, uploadedIds[i]);
+            if (ok) anyExtracted = true;
           } else {
             await persistMessage(
               convId,
               "assistant",
-              `Não consegui extrair os dados de **${a.filename}** automaticamente. Motivo: ${r.error}\n\nVocê ainda pode lançar manualmente no módulo correspondente.`,
+              `Recebi sua imagem **${a.filename}**, mas não identifiquei o tipo. Esse anexo é **extrato**, **fatura**, **FGTS**, **dívida/empréstimo** ou **contracheque**?`,
               [],
             );
+            anyExtracted = true; // evita resposta genérica adicional
           }
-        } catch (err) {
-          console.error("extract error", err);
-          await persistMessage(
-            convId,
-            "assistant",
-            `Falha ao processar **${a.filename}** com IA. Tente novamente ou lance manualmente.`,
-            [],
-          );
+        }
+      }
+
+      // 2) Sem anexo novo, mas o usuário pede para processar o último anexo da conversa
+      if (!anyExtracted && attachments.length === 0 && userWantsExtract) {
+        // Procura último anexo na conversa
+        let lastAtt: AttachmentMeta | null = null;
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const atts = messages[i].metadata?.attachments;
+          if (atts && atts.length > 0) {
+            lastAtt = atts[atts.length - 1];
+            break;
+          }
+        }
+        if (lastAtt) {
+          const ek = detectExtractorKind(text, lastAtt.kind);
+          if (ek) {
+            const ok = await runExtraction(lastAtt, ek);
+            if (ok) anyExtracted = true;
+          } else {
+            await persistMessage(
+              convId,
+              "assistant",
+              `Vou usar o último anexo (**${lastAtt.filename}**), mas preciso saber: esse anexo é **extrato**, **fatura**, **FGTS**, **dívida/empréstimo** ou **contracheque**?`,
+              [],
+            );
+            anyExtracted = true;
+          }
         }
       }
 
@@ -433,8 +506,8 @@ function ChatPage() {
             ? "Private (executivo, com capa, índice e insights)"
             : "Simples (operacional, direto ao ponto)";
         replyContent = `Perfeito. Estou gerando seu **PDF ${exportReq.kind === "private" ? "Private" : "Simples"}** do módulo **${exportReq.module}** para **${exportReq.period}**${exportReq.filters.length ? ` com filtros: ${exportReq.filters.join(", ")}` : ""}.\n\nFormato: ${tipo}.\n\nO download começará em instantes.`;
-      } else if (text || !anyExtracted) {
-        // Só chama a IA conversacional se houve texto OU se não houve extração
+      } else if (text && !anyExtracted) {
+        // Só chama a IA conversacional se houve texto E não houve extração
         try {
           const history = messages
             .slice(-20)
@@ -458,12 +531,16 @@ function ChatPage() {
           console.error(err);
           replyContent = smartReply(text, attachments);
         }
+      } else if (!anyExtracted && attachments.length > 0) {
+        // Anexou imagem sem texto: dá um aviso amigável
+        replyContent = smartReply(text, attachments);
       }
 
       if (replyContent) {
         await persistMessage(convId, "assistant", replyContent, []);
       }
       invalidateMessages();
+
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao enviar");
     } finally {
