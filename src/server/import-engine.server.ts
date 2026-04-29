@@ -458,6 +458,7 @@ export async function extractBankStatementHybridFromImage(opts: {
       result = pro;
     }
   }
+  console.log("[IMPORT_DEBUG] AI_RAW", aiRawByModel);
 
   // B) OCR livre obrigatório + C) parser determinístico brasileiro sobre o OCR.
   let ocrText = "";
