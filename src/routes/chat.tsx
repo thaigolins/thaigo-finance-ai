@@ -176,6 +176,7 @@ function classifyAttachment(file: File): { bucket: StorageBucket; kind: string }
 
 function ChatPage() {
   const { user } = useAuth();
+  const aiChat = useServerFn(aiFinancialChat);
   const qc = useQueryClient();
   const invalidateConvs = useInvalidate("ai_conversations");
   const [activeId, setActiveId] = useState<string | null>(null);
