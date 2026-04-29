@@ -505,7 +505,7 @@ function ChatPage() {
             const debugText = r?.debugText?.trim();
             const msg = debugText
               ? `Nenhum lançamento identificado no extrato.\n\n${reasonEx}\n\nTexto lido pela IA/OCR:\n\n\`\`\`text\n${debugText}\n\`\`\``
-              : `Não foi possível processar o extrato: ${reasonEx}`;
+              : reasonEx;
             await persistMessage(convId!, "assistant", msg, []);
             return false;
           }
