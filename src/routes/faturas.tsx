@@ -117,7 +117,7 @@ function FaturasPage() {
           filename: up.filename,
           mime_type: up.mime,
           size_bytes: up.size,
-          kind: "fatura",
+          kind: "invoice_pdf",
           related_table: "invoices",
           related_id: (inv as { id: string }).id,
         });

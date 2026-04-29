@@ -161,7 +161,7 @@ function DebtsPage() {
           filename: up.filename,
           mime_type: up.mime,
           size_bytes: up.size,
-          kind: "contrato",
+          kind: "loan_contract",
           related_table: "loan_accounts",
         });
         toast.success(`${file.name} arquivado em contratos.`);
