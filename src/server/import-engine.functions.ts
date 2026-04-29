@@ -75,6 +75,16 @@ export const startImport = createServerFn({ method: "POST" })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = sbTyped as any;
 
+    console.log("[startImport] step=begin", {
+      userId,
+      bucket: data.bucket,
+      path: data.path,
+      filename: data.filename,
+      mime: data.mime,
+      kind: data.kind,
+      hasApiKey: !!process.env.LOVABLE_API_KEY,
+    });
+
     // 1) Cria sessão em status extracting
     const sessionInsert = await supabase
       .from("import_sessions")
@@ -92,31 +102,60 @@ export const startImport = createServerFn({ method: "POST" })
       .single();
 
     if (sessionInsert.error || !sessionInsert.data) {
+      console.error("[startImport] step=session_insert FAILED", sessionInsert.error);
       return { ok: false as const, error: `Falha ao criar sessão: ${sessionInsert.error?.message ?? "?"}` };
     }
     const sessionId = (sessionInsert.data as { id: string }).id;
+    console.log("[startImport] step=session_created", { sessionId });
 
     // 2) Baixa arquivo do storage
     const dl = await supabase.storage.from(data.bucket).download(data.path);
     if (dl.error || !dl.data) {
-      const msg = `Falha ao ler arquivo: ${dl.error?.message ?? "desconhecido"}`;
+      const msg = `Falha ao ler arquivo do storage (${data.bucket}/${data.path}): ${dl.error?.message ?? "desconhecido"}`;
+      console.error("[startImport] step=storage_download FAILED", dl.error);
       await supabase.from("import_sessions").update({ status: "failed", errors: [msg] }).eq("id", sessionId);
       await logAudit(supabase, { userId, action: "extract", docKind: data.kind, status: "error", message: msg });
       return { ok: false as const, error: msg, sessionId };
     }
     const ab = await dl.data.arrayBuffer();
     const bytes = new Uint8Array(ab);
+    console.log("[startImport] step=file_downloaded", { bytes: bytes.byteLength });
 
     // 3) Roda pipeline (por enquanto só image_ai para extrato)
-    const result = await extractBankStatementFromImage({
-      fileBytes: bytes,
-      mime: data.mime,
-      filename: data.filename,
+    let result;
+    try {
+      result = await extractBankStatementFromImage({
+        fileBytes: bytes,
+        mime: data.mime,
+        filename: data.filename,
+      });
+    } catch (e) {
+      const msg = `Erro no extractor: ${e instanceof Error ? e.message : String(e)}`;
+      console.error("[startImport] step=extractor THREW", e);
+      await supabase.from("import_sessions").update({ status: "failed", errors: [msg] }).eq("id", sessionId);
+      return { ok: false as const, error: msg, sessionId };
+    }
+    console.log("[startImport] step=extraction_done", {
+      method: result.method,
+      txCount: result.transactions.length,
+      errors: result.errors,
     });
 
     // 4) Validação
     const { valid, errors: vErrors } = validateTransactions(result.transactions);
     const allErrors = [...result.errors, ...vErrors];
+    console.log("[startImport] step=validated", { validCount: valid.length, errCount: allErrors.length });
+
+    // Se nada extraído, encerra com mensagem real
+    if (valid.length === 0) {
+      const detail = allErrors.length > 0 ? allErrors.join(" | ") : "IA não retornou nenhum lançamento.";
+      await supabase
+        .from("import_sessions")
+        .update({ status: "failed", errors: allErrors.length > 0 ? allErrors : [detail] })
+        .eq("id", sessionId);
+      console.error("[startImport] step=no_transactions", { detail });
+      return { ok: false as const, error: `Falha ao processar extrato: ${detail}`, sessionId };
+    }
 
     // 5) Anti-duplicidade
     const dupes = await detectDuplicates({
