@@ -322,11 +322,46 @@ export function parseExtratoFromText(text: string): RawTx[] {
   return txs;
 }
 
+function normalizeAiTransactions(parsed: unknown, model: string): ExtractionResult | null {
+  if (!parsed || typeof parsed !== "object") return null;
+  const p = parsed as Record<string, unknown>;
+  const txsRaw = Array.isArray(p.transactions) ? (p.transactions as unknown[]) : [];
+  const transactions: RawTx[] = [];
+  for (const t of txsRaw) {
+    if (!t || typeof t !== "object") continue;
+    const r = t as Record<string, unknown>;
+    const amount = Number(r.amount);
+    const k = r.kind === "income" ? "income" : "expense";
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    transactions.push({
+      occurred_at: typeof r.occurred_at === "string" ? r.occurred_at : null,
+      description: String(r.description ?? "").trim(),
+      amount: Math.abs(amount),
+      kind: k,
+      category_hint: typeof r.category_hint === "string" ? r.category_hint : null,
+      confidence: typeof r.confidence === "number" ? r.confidence : null,
+    });
+  }
+  console.log("[import-engine] vision JSON parsed", { model, txCount: transactions.length, bank_hint: p.bank_hint });
+  return {
+    method: "image_ai",
+    bank_hint: typeof p.bank_hint === "string" ? p.bank_hint : null,
+    account_hint: typeof p.account_hint === "string" ? p.account_hint : null,
+    period_start: typeof p.period_start === "string" ? p.period_start : null,
+    period_end: typeof p.period_end === "string" ? p.period_end : null,
+    opening_balance: typeof p.opening_balance === "number" ? p.opening_balance : null,
+    closing_balance: typeof p.closing_balance === "number" ? p.closing_balance : null,
+    transactions,
+    errors: Array.isArray(p.errors) ? (p.errors as string[]) : [],
+    raw: { vision_json: parsed },
+  };
+}
+
 /**
- * Extrai um extrato bancário de uma imagem/print usando IA multimodal.
- * Estratégia: gemini-2.5-flash; se baixa confiança, fallback para gemini-2.5-pro.
+ * Extrai extrato bancário de imagem/print em 3 etapas obrigatórias:
+ * A) Vision JSON direto; B) OCR livre; C) parser brasileiro determinístico sobre o OCR.
  */
-export async function extractBankStatementFromImage(opts: {
+export async function extractBankStatementHybridFromImage(opts: {
   fileBytes: Uint8Array;
   mime: string;
   filename: string;
@@ -363,7 +398,7 @@ export async function extractBankStatementFromImage(opts: {
   ];
 
   const errorsCollected: string[] = [];
-  const tryModel = async (model: string): Promise<ExtractionResult | null> => {
+  const tryVisionJson = async (model: string): Promise<ExtractionResult | null> => {
     let content: string;
     try {
       content = await callGateway(model, messages, apiKey);
@@ -374,48 +409,19 @@ export async function extractBankStatementFromImage(opts: {
       return null;
     }
     const parsed = safeParseJson(content);
-    if (!parsed || typeof parsed !== "object") {
+    const normalized = normalizeAiTransactions(parsed, model);
+    if (!normalized) {
       const preview = content.slice(0, 500).replace(/\s+/g, " ");
       const msg = `${model}: parse JSON falhou (len=${content.length}, preview 500ch: ${preview})`;
       console.error("[import-engine] PARSE FAILED", { model, len: content.length, preview });
       errorsCollected.push(msg);
       return null;
     }
-    const p = parsed as Record<string, unknown>;
-    const txsRaw = Array.isArray(p.transactions) ? (p.transactions as unknown[]) : [];
-    const transactions: RawTx[] = [];
-    for (const t of txsRaw) {
-      if (!t || typeof t !== "object") continue;
-      const r = t as Record<string, unknown>;
-      const amount = Number(r.amount);
-      const k = r.kind === "income" ? "income" : "expense";
-      if (!Number.isFinite(amount) || amount === 0) continue;
-      transactions.push({
-        occurred_at: typeof r.occurred_at === "string" ? r.occurred_at : null,
-        description: String(r.description ?? "").trim(),
-        amount: Math.abs(amount),
-        kind: k,
-        category_hint: typeof r.category_hint === "string" ? r.category_hint : null,
-        confidence: typeof r.confidence === "number" ? r.confidence : null,
-      });
-    }
-    console.log("[import-engine] PARSED OK", { model, txCount: transactions.length, bank_hint: p.bank_hint });
-    return {
-      method: "image_ai",
-      bank_hint: typeof p.bank_hint === "string" ? p.bank_hint : null,
-      account_hint: typeof p.account_hint === "string" ? p.account_hint : null,
-      period_start: typeof p.period_start === "string" ? p.period_start : null,
-      period_end: typeof p.period_end === "string" ? p.period_end : null,
-      opening_balance: typeof p.opening_balance === "number" ? p.opening_balance : null,
-      closing_balance: typeof p.closing_balance === "number" ? p.closing_balance : null,
-      transactions,
-      errors: Array.isArray(p.errors) ? (p.errors as string[]) : [],
-      raw: parsed,
-    };
+    return normalized;
   };
 
-  // 1ª tentativa: Flash
-  let result = await tryModel("google/gemini-2.5-flash");
+  // A) Vision JSON direto — tenta estruturar, mas não depende exclusivamente disso.
+  let result = await tryVisionJson("google/gemini-2.5-flash");
 
   // Avalia confidence média; se baixa ou vazia, tenta Pro
   const avgConf = result && result.transactions.length > 0
@@ -423,59 +429,85 @@ export async function extractBankStatementFromImage(opts: {
     : 0;
 
   if (!result || result.transactions.length === 0 || avgConf < 0.55) {
-    const pro = await tryModel("google/gemini-2.5-pro");
+    const pro = await tryVisionJson("google/gemini-2.5-pro");
     if (pro && pro.transactions.length > 0) {
       result = pro;
     }
   }
 
-  // Fallback: OCR livre + parser regex se nada estruturado
-  if (!result || result.transactions.length === 0) {
-    console.warn("[import-engine] FALLBACK: tentando OCR livre + regex");
-    try {
-      const ocrText = await ocrFreeText({ base64, mime, apiKey });
-      console.log("[import-engine] OCR text length", { len: ocrText.length, preview: ocrText.slice(0, 300) });
-      if (ocrText.trim().length > 0) {
-        const regexTxs = parseExtratoFromText(ocrText);
-        console.log("[import-engine] regex parser", { extracted: regexTxs.length });
-        if (regexTxs.length > 0) {
-          return {
-            method: "ai_fallback",
-            transactions: regexTxs,
-            errors: [
-              ...errorsCollected,
-              `Fallback OCR+regex usado (${regexTxs.length} lançamento(s) detectados).`,
-            ],
-            raw: { ocr_preview: ocrText.slice(0, 1000) },
-          };
-        }
-        errorsCollected.push(
-          `OCR retornou ${ocrText.length} caracteres mas o parser regex não encontrou linhas no formato esperado. Preview: ${ocrText.slice(0, 300)}`,
-        );
-      } else {
-        errorsCollected.push("OCR retornou texto vazio.");
-      }
-    } catch (e) {
-      const msg = `Fallback OCR falhou: ${e instanceof Error ? e.message : String(e)}`;
-      console.error("[import-engine]", msg);
-      errorsCollected.push(msg);
-    }
+  // B) OCR livre obrigatório + C) parser determinístico brasileiro sobre o OCR.
+  let ocrText = "";
+  try {
+    ocrText = await ocrFreeText({ base64, mime, apiKey });
+    console.log("[import-engine] OCR bruto", { len: ocrText.length, preview: ocrText.slice(0, 500) });
+  } catch (e) {
+    const msg = `OCR livre falhou: ${e instanceof Error ? e.message : String(e)}`;
+    console.error("[import-engine]", msg);
+    errorsCollected.push(msg);
   }
 
-  if (!result) {
+  if (ocrText.trim().length > 0) {
+    const parserTxs = parseExtratoFromText(ocrText);
+    console.log("[import-engine] parser brasileiro", { extracted: parserTxs.length, total_count: parserTxs.length });
+    if (parserTxs.length > 0) {
+      return {
+        ...(result ?? {}),
+        method: result && result.transactions.length > 0 ? "image_ai" : "ai_fallback",
+        transactions: parserTxs,
+        errors: [
+          ...(result?.errors ?? []),
+          ...errorsCollected,
+          `Parser OCR brasileiro usado (${parserTxs.length} lançamento(s) detectados).`,
+        ],
+        raw: {
+          ...(typeof result?.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
+          ocr_text: ocrText,
+          parser_count: parserTxs.length,
+        },
+      };
+    }
+    errorsCollected.push(
+      `OCR retornou texto, mas o parser identificou 0 lançamentos. OCR preview: ${ocrText.slice(0, 500)}`,
+    );
+  } else {
+    errorsCollected.push("OCR livre retornou texto vazio.");
+  }
+
+  if (!result || result.transactions.length === 0) {
     return {
       method: "image_ai",
       transactions: [],
       errors: errorsCollected.length > 0
         ? errorsCollected
         : ["A IA não conseguiu estruturar este documento. Tente um print mais legível."],
+      raw: {
+        ocr_text: ocrText,
+        parser_count: 0,
+        parser_errors: errorsCollected,
+      },
     };
   }
   // Anexa erros coletados também quando algum modelo deu certo no fim
   if (errorsCollected.length > 0) {
-    result = { ...result, errors: [...(result.errors ?? []), ...errorsCollected] };
+    result = {
+      ...result,
+      errors: [...(result.errors ?? []), ...errorsCollected],
+      raw: {
+        ...(typeof result.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
+        ocr_text: ocrText,
+        parser_count: 0,
+      },
+    };
   }
   return result;
+}
+
+export async function extractBankStatementFromImage(opts: {
+  fileBytes: Uint8Array;
+  mime: string;
+  filename: string;
+}): Promise<ExtractionResult> {
+  return extractBankStatementHybridFromImage(opts);
 }
 
 // ============================================================
