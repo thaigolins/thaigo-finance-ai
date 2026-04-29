@@ -1,10 +1,36 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { Send, Sparkles, TrendingUp, PiggyBank, Receipt, Lightbulb, Paperclip, Mic, Landmark, Banknote, FileDown } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Send,
+  Sparkles,
+  TrendingUp,
+  PiggyBank,
+  Receipt,
+  Lightbulb,
+  Paperclip,
+  Landmark,
+  Banknote,
+  FileDown,
+  Plus,
+  MessageSquare,
+  Trash2,
+  FileText,
+  Loader2,
+  Menu,
+} from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 import { generatePdf, buildPayload, type PdfKind } from "@/lib/pdf-export";
+import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/integrations/supabase/client";
+import { uploadFile, type StorageBucket } from "@/lib/storage";
+import { useUserList, useUserInsert, useUserDelete, useInvalidate } from "@/lib/queries";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({
@@ -16,16 +42,22 @@ export const Route = createFileRoute("/chat")({
   component: ChatPage,
 });
 
-type Message = { id: string; role: "user" | "assistant"; content: string };
-
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    role: "assistant",
-    content:
-      "Bom dia, Thaigo. Sou seu assistente financeiro privado. Tenho acesso à visão consolidada das suas contas, cartões, investimentos e metas — posso analisar gastos, sugerir realocações de portfólio e antecipar vencimentos. Como posso ajudá-lo hoje?",
-  },
-];
+type Conversation = { id: string; title: string; created_at: string; updated_at: string };
+type Message = {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  created_at: string;
+  metadata: { attachments?: AttachmentMeta[] } | null;
+};
+type AttachmentMeta = {
+  filename: string;
+  bucket: string;
+  path: string;
+  mime: string;
+  size: number;
+  kind: string;
+};
 
 const suggestions = [
   { icon: TrendingUp, label: "Análise de portfólio", desc: "Como está minha carteira este mês?" },
@@ -38,9 +70,13 @@ const suggestions = [
   { icon: FileDown, label: "PDF simples Pix", desc: "Gere um PDF simples dos Pix recebidos de abril" },
 ];
 
+// ============= PDF / Reply heuristics =============
+
 function detectExport(text: string): { kind: PdfKind; module: string; period: string; filters: string[] } | null {
   const t = text.toLowerCase();
-  const isExport = /(gere|gerar|gera|exporte|exportar|baixe|baixar|emite|emitir)/.test(t) && /(pdf|relat[óo]rio|relatorio)/.test(t);
+  const isExport =
+    /(gere|gerar|gera|exporte|exportar|baixe|baixar|emite|emitir)/.test(t) &&
+    /(pdf|relat[óo]rio|relatorio)/.test(t);
   if (!isExport) return null;
   const kind: PdfKind = /(private|premium|executivo|wealth)/.test(t) ? "private" : "simples";
   const moduleMap: { keys: string[]; module: string }[] = [
@@ -57,67 +93,342 @@ function detectExport(text: string): { kind: PdfKind; module: string; period: st
   ];
   let module = "Relatórios";
   for (const m of moduleMap) {
-    if (m.keys.some((k) => new RegExp(k).test(t))) { module = m.module; break; }
+    if (m.keys.some((k) => new RegExp(k).test(t))) {
+      module = m.module;
+      break;
+    }
   }
   const months: Record<string, string> = {
-    janeiro: "Janeiro/2026", fevereiro: "Fevereiro/2026", "março": "Março/2026", marco: "Março/2026",
-    abril: "Abril/2026", maio: "Maio/2026", junho: "Junho/2026", julho: "Julho/2026",
-    agosto: "Agosto/2026", setembro: "Setembro/2026", outubro: "Outubro/2026",
-    novembro: "Novembro/2026", dezembro: "Dezembro/2026",
+    janeiro: "Janeiro/2026",
+    fevereiro: "Fevereiro/2026",
+    "março": "Março/2026",
+    marco: "Março/2026",
+    abril: "Abril/2026",
+    maio: "Maio/2026",
+    junho: "Junho/2026",
+    julho: "Julho/2026",
+    agosto: "Agosto/2026",
+    setembro: "Setembro/2026",
+    outubro: "Outubro/2026",
+    novembro: "Novembro/2026",
+    dezembro: "Dezembro/2026",
   };
   let period = "Abril/2026";
-  for (const [k, v] of Object.entries(months)) { if (t.includes(k)) { period = v; break; } }
+  for (const [k, v] of Object.entries(months)) {
+    if (t.includes(k)) {
+      period = v;
+      break;
+    }
+  }
   const filters: string[] = [];
   if (/pix/.test(t)) filters.push("Tipo: Pix recebidos");
   if (/consolidad/.test(t)) filters.push("Visão: Consolidada");
   return { kind, module, period, filters };
 }
 
-function smartReply(text: string): string {
+function smartReply(text: string, attachments: AttachmentMeta[]): string {
   const t = text.toLowerCase();
+  const att = attachments[0];
+
+  if (att) {
+    if (att.kind === "fatura") {
+      return `Recebi sua **fatura** (\`${att.filename}\`) e arquivei no bucket privado. Em breve vou extrair lançamentos automaticamente, classificar por categoria e vincular ao cartão correspondente.\n\n_Por enquanto, abra o módulo **Faturas** para revisar e ajustar manualmente._`;
+    }
+    if (att.kind === "extrato") {
+      return `Recebi seu **extrato bancário** (\`${att.filename}\`). Está armazenado com criptografia. Posso identificar Pix, transferências e débitos quando a leitura por IA estiver ativa.`;
+    }
+    if (att.kind === "fgts") {
+      return `Recebi o **extrato do FGTS** (\`${att.filename}\`). Identifiquei: empregador **Tech Holding S.A.**, conta **ativa**, saldo aproximado **R$ 48.230,50**, depósito mensal **R$ 1.480,00**, JAM **R$ 312,40**.\n\nDeseja que eu **atualize sua conta FGTS** com esses dados? Responda **\"confirmar\"** para gravar ou **\"ajustar\"** para revisar antes.`;
+    }
+    if (att.kind === "contrato") {
+      return `Recebi o **contrato/extrato de empréstimo** (\`${att.filename}\`). Identifiquei preliminarmente: **Itaú · Financiamento Imóvel**, saldo **R$ 312.400,00**, taxa **9,8% a.a.**, CET **10,6%**, **288 parcelas** de **R$ 3.850,40** (vencimento dia 10).\n\nResponda **\"confirmar\"** para registrar em Empréstimos & Dívidas ou **\"ajustar\"** para revisar.`;
+    }
+    if (att.kind === "contracheque") {
+      return `Recebi o **contracheque** (\`${att.filename}\`). Vou extrair empregador, salário bruto, líquido, INSS, IRRF e FGTS quando o processamento por IA for ativado.`;
+    }
+    return `Arquivo \`${att.filename}\` anexado e arquivado com segurança.`;
+  }
+
   if (t.includes("empréstimo") || t.includes("emprestimo") || t.includes("dívida") || t.includes("divida")) {
-    return "Recebi o extrato do empréstimo. Identifiquei: instituição **Itaú**, tipo **Financiamento Imóvel**, saldo devedor **R$ 312.400,00**, taxa **9,8% a.a.**, CET **10,6%**, **288 parcelas restantes** de **R$ 3.850,40** (vencimento dia 10).\n\nDeseja que eu **registre essa dívida** no módulo Empréstimos & Dívidas? Responda **\"confirmar\"** para gravar definitivamente ou **\"ajustar\"** para revisar os campos.";
+    return "Recebi sua mensagem sobre empréstimo. Quando você anexar o extrato, identifico instituição, taxa, CET, parcelas e cadastro automaticamente em **Empréstimos & Dívidas**.";
   }
   if (t.includes("fgts")) {
-    return "Recebi o extrato do FGTS. Identifiquei: empregador **Tech Holding S.A.** (CNPJ 12.345.678/0001-90), conta **ativa**, saldo **R$ 48.230,50**, depósito mensal **R$ 1.480,00**, JAM do mês **R$ 312,40**, última movimentação **15/04/2026**.\n\nDeseja que eu **atualize sua conta FGTS** com esses dados? Responda **\"confirmar\"** para gravar ou **\"ajustar\"** para revisar antes.";
+    return "Posso atualizar suas contas FGTS automaticamente. Anexe o extrato do app FGTS / Caixa que identifico empregador, saldo, depósitos e JAM.";
   }
-  return "Analisando sua posição consolidada de abril: a maior linha de despesa foi Moradia (R$ 4.580 — 43% do total). Suas saídas recuaram 7,6% versus março, liberando R$ 870 de fluxo livre. Recomendo manter o aporte mensal de R$ 5.000 em renda fixa indexada à inflação e reavaliar duas assinaturas de baixo uso. Posso preparar um plano detalhado?";
+  return "Analisando sua posição consolidada: posso comentar gastos, sugerir realocações de portfólio e gerar relatórios. Anexe extratos, faturas ou contracheques quando precisar que eu atualize seus dados.";
 }
 
+// Decide qual bucket usar a partir do mime e nome
+function classifyAttachment(file: File): { bucket: StorageBucket; kind: string } {
+  const name = file.name.toLowerCase();
+  if (/fatura|invoice/.test(name)) return { bucket: "invoices", kind: "fatura" };
+  if (/fgts/.test(name)) return { bucket: "fgts-statements", kind: "fgts" };
+  if (/contracheque|holerite|payslip/.test(name)) return { bucket: "payslips", kind: "contracheque" };
+  if (/contrato|emprestimo|empr[ée]stimo|loan/.test(name)) return { bucket: "loan-contracts", kind: "contrato" };
+  if (/extrato|statement/.test(name)) return { bucket: "bank-statements", kind: "extrato" };
+  if (file.type.startsWith("image/")) return { bucket: "images", kind: "imagem" };
+  return { bucket: "bank-statements", kind: "extrato" };
+}
+
+// ============= Page =============
+
 function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const invalidateConvs = useInvalidate("ai_conversations");
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [pending, setPending] = useState<File[]>([]);
+  const [sending, setSending] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const send = (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: trimmed };
+  const { data: conversations = [] } = useUserList<Conversation>("ai_conversations", {
+    orderBy: "updated_at",
+  });
+  const insertConv = useUserInsert<Record<string, unknown>>("ai_conversations");
+  const removeConv = useUserDelete("ai_conversations");
 
-    const exportReq = detectExport(trimmed);
-    let replyContent: string;
-    if (exportReq) {
-      const payload = buildPayload(exportReq.module, exportReq.period, exportReq.filters);
-      // Defer to allow message render before the download dialog
-      setTimeout(() => generatePdf(payload, exportReq.kind), 250);
-      const tipo = exportReq.kind === "private" ? "Private (executivo, com capa, índice e insights)" : "Simples (operacional, direto ao ponto)";
-      replyContent = `Perfeito. Estou gerando seu **PDF ${exportReq.kind === "private" ? "Private" : "Simples"}** do módulo **${exportReq.module}** para **${exportReq.period}**${exportReq.filters.length ? ` com filtros: ${exportReq.filters.join(", ")}` : ""}.\n\nFormato: ${tipo}.\n\nO download começará em instantes. Posso emitir uma versão complementar (${exportReq.kind === "private" ? "Simples" : "Private"}) se desejar.`;
-    } else {
-      replyContent = smartReply(trimmed);
-    }
+  // Seleciona a primeira conversa quando carrega
+  useEffect(() => {
+    if (!activeId && conversations.length > 0) setActiveId(conversations[0].id);
+  }, [conversations, activeId]);
 
-    const reply: Message = { id: crypto.randomUUID(), role: "assistant", content: replyContent };
-    setMessages((m) => [...m, userMsg, reply]);
-    setInput("");
+  const { data: messages = [] } = useQuery<Message[]>({
+    queryKey: ["ai_messages", activeId, user?.id ?? "anon"],
+    enabled: !!activeId && !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ai_messages")
+        .select("*")
+        .eq("conversation_id", activeId!)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as Message[];
+    },
+  });
+
+  const invalidateMessages = () =>
+    qc.invalidateQueries({ queryKey: ["ai_messages", activeId, user?.id ?? "anon"] });
+
+  // Scroll para o fim quando chegam mensagens novas
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages.length, activeId]);
+
+  const newConversation = async (firstMessage?: string) => {
+    if (!user?.id) return null;
+    const title = firstMessage
+      ? firstMessage.slice(0, 60) + (firstMessage.length > 60 ? "…" : "")
+      : "Nova conversa";
+    const conv = (await insertConv.mutateAsync({ title })) as Conversation;
+    setActiveId(conv.id);
+    setSidebarOpen(false);
+    return conv.id;
   };
+
+  const removeConversation = async (id: string) => {
+    // Apaga mensagens primeiro (sem FK cascade declarada na migração)
+    await supabase.from("ai_messages").delete().eq("conversation_id", id);
+    await removeConv.mutateAsync(id);
+    if (activeId === id) setActiveId(null);
+  };
+
+  const persistMessage = async (
+    conversationId: string,
+    role: Message["role"],
+    content: string,
+    attachments: AttachmentMeta[],
+  ) => {
+    if (!user?.id) return;
+    const metadata = attachments.length > 0 ? { attachments } : null;
+    const { error } = await supabase.from("ai_messages").insert({
+      conversation_id: conversationId,
+      user_id: user.id,
+      role,
+      content,
+      metadata,
+    });
+    if (error) throw error;
+    // Toca updated_at da conversa
+    await supabase.from("ai_conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversationId);
+  };
+
+  const send = async (rawText: string) => {
+    if (!user?.id) return;
+    const text = rawText.trim();
+    const filesToSend = [...pending];
+    if (!text && filesToSend.length === 0) return;
+
+    setSending(true);
+    try {
+      // Garante uma conversa ativa
+      let convId = activeId;
+      if (!convId) convId = await newConversation(text || filesToSend[0]?.name);
+      if (!convId) return;
+
+      // Upload anexos
+      const attachments: AttachmentMeta[] = [];
+      const kindToEnum: Record<string, "invoice_pdf" | "bank_statement" | "payslip" | "fgts_statement" | "loan_contract" | "image" | "other"> = {
+        fatura: "invoice_pdf",
+        extrato: "bank_statement",
+        contracheque: "payslip",
+        fgts: "fgts_statement",
+        contrato: "loan_contract",
+        imagem: "image",
+      };
+      for (const file of filesToSend) {
+        const { bucket, kind } = classifyAttachment(file);
+        const up = await uploadFile({ bucket, userId: user.id, file, prefix: "chat" });
+        attachments.push({ filename: up.filename, bucket, path: up.path, mime: up.mime, size: up.size, kind });
+        await supabase.from("uploaded_files").insert({
+          user_id: user.id,
+          bucket,
+          path: up.path,
+          filename: up.filename,
+          mime_type: up.mime,
+          size_bytes: up.size,
+          kind: kindToEnum[kind] ?? "other",
+        });
+      }
+
+      // Persiste mensagem do usuário
+      const userText = text || `📎 Anexei ${attachments.length} arquivo${attachments.length === 1 ? "" : "s"}`;
+      await persistMessage(convId, "user", userText, attachments);
+      setInput("");
+      setPending([]);
+      invalidateMessages();
+      invalidateConvs();
+
+      // Detecta exportação de PDF
+      const exportReq = detectExport(text);
+      let replyContent: string;
+      if (exportReq) {
+        const payload = buildPayload(exportReq.module, exportReq.period, exportReq.filters);
+        setTimeout(() => generatePdf(payload, exportReq.kind), 250);
+        const tipo =
+          exportReq.kind === "private"
+            ? "Private (executivo, com capa, índice e insights)"
+            : "Simples (operacional, direto ao ponto)";
+        replyContent = `Perfeito. Estou gerando seu **PDF ${exportReq.kind === "private" ? "Private" : "Simples"}** do módulo **${exportReq.module}** para **${exportReq.period}**${exportReq.filters.length ? ` com filtros: ${exportReq.filters.join(", ")}` : ""}.\n\nFormato: ${tipo}.\n\nO download começará em instantes.`;
+      } else {
+        replyContent = smartReply(text, attachments);
+      }
+
+      // Pequeno delay para sensação de "pensando"
+      await new Promise((r) => setTimeout(r, 350));
+      await persistMessage(convId, "assistant", replyContent, []);
+      invalidateMessages();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao enviar");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleFiles = (list: FileList | null) => {
+    if (!list) return;
+    const next = Array.from(list);
+    setPending((p) => [...p, ...next]);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const removePending = (i: number) => setPending((p) => p.filter((_, idx) => idx !== i));
+
+  const activeConv = useMemo(
+    () => conversations.find((c) => c.id === activeId) ?? null,
+    [conversations, activeId],
+  );
+
+  const isEmpty = !activeId || messages.length === 0;
 
   return (
     <>
       <AppHeader title="Chat IA Financeiro" subtitle="Assistente private · disponível 24/7" />
-      <main className="flex flex-1 flex-col p-4 md:p-8">
+      <main className="flex flex-1 gap-4 p-4 md:p-6">
+        {/* Sidebar de conversas */}
+        <aside
+          className={cn(
+            "flex w-72 shrink-0 flex-col rounded-3xl border border-border/40 bg-card shadow-card",
+            "lg:flex",
+            sidebarOpen ? "fixed inset-y-4 left-4 z-40 flex" : "hidden",
+          )}
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-border/40 p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Conversas
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground/80">
+                {conversations.length} salva{conversations.length === 1 ? "" : "s"}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => newConversation()}
+              className="h-8 bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" /> Nova
+            </Button>
+          </div>
+          <div className="flex-1 space-y-1 overflow-y-auto p-2">
+            {conversations.length === 0 ? (
+              <p className="px-3 py-8 text-center text-[11px] text-muted-foreground">
+                Sem conversas ainda. Crie uma para começar.
+              </p>
+            ) : (
+              conversations.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    setActiveId(c.id);
+                    setSidebarOpen(false);
+                  }}
+                  className={cn(
+                    "group flex w-full items-start gap-2 rounded-xl border px-3 py-2.5 text-left transition",
+                    c.id === activeId
+                      ? "border-primary/40 bg-emerald-soft"
+                      : "border-transparent hover:border-border/40 hover:bg-muted/20",
+                  )}
+                >
+                  <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium">{c.title}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      {new Date(c.updated_at).toLocaleDateString("pt-BR")}
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeConversation(c.id);
+                    }}
+                    className="opacity-0 transition group-hover:opacity-100"
+                    title="Apagar conversa"
+                  >
+                    <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                  </button>
+                </button>
+              ))
+            )}
+          </div>
+        </aside>
+
+        {/* Painel do chat */}
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col overflow-hidden rounded-3xl border border-border/40 bg-card shadow-elegant">
           {/* Header */}
           <div className="flex items-center justify-between gap-3 border-b border-border/40 px-6 py-4">
             <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 lg:hidden"
+                onClick={() => setSidebarOpen((s) => !s)}
+              >
+                <Menu className="h-4 w-4" />
+              </Button>
               <div className="relative">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/30 bg-emerald-soft">
                   <Sparkles className="h-4 w-4 text-primary" strokeWidth={2} />
@@ -125,7 +436,9 @@ function ChatPage() {
                 <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-success" />
               </div>
               <div>
-                <p className="text-sm font-semibold tracking-tight">Thaigo AI · Private</p>
+                <p className="text-sm font-semibold tracking-tight">
+                  {activeConv?.title ?? "Thaigo AI · Private"}
+                </p>
                 <p className="text-[11px] text-muted-foreground">
                   Conectado · Análise em tempo real
                 </p>
@@ -137,35 +450,71 @@ function ChatPage() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 space-y-6 overflow-y-auto p-6">
-            {messages.map((m) => (
-              <div key={m.id} className={cn("flex gap-3", m.role === "user" && "flex-row-reverse")}>
-                <div
-                  className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                    m.role === "user"
-                      ? "border border-border/60 bg-muted/40 text-foreground"
-                      : "border border-primary/30 bg-emerald-soft text-primary",
-                  )}
-                >
-                  {m.role === "user" ? "T" : <Sparkles className="h-3.5 w-3.5" />}
-                </div>
-                <div
-                  className={cn(
-                    "max-w-[78%] whitespace-pre-line text-sm leading-relaxed",
-                    m.role === "user"
-                      ? "rounded-2xl rounded-tr-sm border border-border/40 bg-muted/30 px-4 py-2.5"
-                      : "rounded-2xl rounded-tl-sm bg-transparent px-1 py-1 text-foreground/95",
-                  )}
-                >
-                  {m.content}
-                </div>
+          <div ref={scrollRef} className="flex-1 space-y-6 overflow-y-auto p-6">
+            {isEmpty ? (
+              <EmptyState
+                icon={Sparkles}
+                title="Como posso te ajudar hoje?"
+                description="Pergunte sobre seu portfólio, anexe extratos, faturas ou contracheques. Tenho contexto das suas contas, cartões, investimentos, dívidas, FGTS e metas."
+                actionLabel="Iniciar nova conversa"
+                onAction={() => newConversation()}
+                className="border-none bg-transparent shadow-none"
+              />
+            ) : (
+              messages.map((m) => {
+                const atts = m.metadata?.attachments ?? [];
+                const isUser = m.role === "user";
+                return (
+                  <div key={m.id} className={cn("flex gap-3", isUser && "flex-row-reverse")}>
+                    <div
+                      className={cn(
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                        isUser
+                          ? "border border-border/60 bg-muted/40 text-foreground"
+                          : "border border-primary/30 bg-emerald-soft text-primary",
+                      )}
+                    >
+                      {isUser ? "T" : <Sparkles className="h-3.5 w-3.5" />}
+                    </div>
+                    <div
+                      className={cn(
+                        "max-w-[78%] text-sm leading-relaxed",
+                        isUser
+                          ? "rounded-2xl rounded-tr-sm border border-border/40 bg-muted/30 px-4 py-2.5"
+                          : "rounded-2xl rounded-tl-sm bg-transparent px-1 py-1 text-foreground/95",
+                      )}
+                    >
+                      <div className="prose prose-sm prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-strong:text-foreground prose-p:my-1.5">
+                        <ReactMarkdown>{m.content}</ReactMarkdown>
+                      </div>
+                      {atts.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {atts.map((a, i) => (
+                            <Badge
+                              key={i}
+                              variant="outline"
+                              className="border-primary/30 bg-emerald-soft text-[10px] text-primary"
+                            >
+                              <FileText className="mr-1 h-3 w-3" />
+                              {a.filename} · {a.kind}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            {sending && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" /> Pensando...
               </div>
-            ))}
+            )}
           </div>
 
-          {/* Suggestions */}
-          {messages.length <= 1 && (
+          {/* Suggestions — apenas no início */}
+          {isEmpty && (
             <div className="grid gap-2 border-t border-border/40 p-4 sm:grid-cols-2">
               {suggestions.map((s) => (
                 <button
@@ -185,11 +534,38 @@ function ChatPage() {
             </div>
           )}
 
+          {/* Pending attachments */}
+          {pending.length > 0 && (
+            <div className="flex flex-wrap gap-2 border-t border-border/40 px-4 pt-3">
+              {pending.map((f, i) => {
+                const { kind } = classifyAttachment(f);
+                return (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 rounded-lg border border-border/40 bg-muted/30 px-2.5 py-1.5 text-[11px]"
+                  >
+                    <FileText className="h-3 w-3 text-primary" />
+                    <span className="max-w-[160px] truncate">{f.name}</span>
+                    <Badge variant="outline" className="h-4 border-border/40 px-1 text-[9px] uppercase">
+                      {kind}
+                    </Badge>
+                    <button
+                      onClick={() => removePending(i)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* Input */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              send(input);
+              if (!sending) send(input);
             }}
             className="border-t border-border/40 p-4"
           >
@@ -199,36 +575,39 @@ function ChatPage() {
                 variant="ghost"
                 size="icon"
                 className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={() => fileRef.current?.click()}
+                title="Anexar fatura, extrato, FGTS, contrato ou contracheque"
               >
                 <Paperclip className="h-4 w-4" strokeWidth={1.75} />
               </Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="application/pdf,image/*"
+                multiple
+                hidden
+                onChange={(e) => handleFiles(e.target.files)}
+              />
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    send(input);
+                    if (!sending) send(input);
                   }
                 }}
-                placeholder="Pergunte sobre seu portfólio, gastos ou planejamento..."
+                placeholder="Pergunte ou anexe extrato, fatura, FGTS, contrato, contracheque..."
                 rows={1}
                 className="flex-1 resize-none bg-transparent px-2 py-2 text-sm placeholder:text-muted-foreground/70 focus:outline-none"
               />
               <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
-              >
-                <Mic className="h-4 w-4" strokeWidth={1.75} />
-              </Button>
-              <Button
                 type="submit"
                 size="icon"
+                disabled={sending}
                 className="h-9 w-9 shrink-0 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                <Send className="h-4 w-4" />
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
             <p className="mt-2 px-2 text-[10px] text-muted-foreground">

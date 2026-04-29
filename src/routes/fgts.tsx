@@ -148,7 +148,7 @@ function FgtsPage() {
           filename: up.filename,
           mime_type: up.mime,
           size_bytes: up.size,
-          kind: "fgts",
+          kind: "fgts_statement",
           related_table: "fgts_accounts",
         });
         toast.success(`${file.name} arquivado.`);
