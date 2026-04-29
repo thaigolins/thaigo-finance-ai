@@ -205,7 +205,9 @@ export const extractDocument = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => ExtractInput.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+    const { supabase: sbTyped, userId } = context;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = sbTyped as any;
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) {
       return {
