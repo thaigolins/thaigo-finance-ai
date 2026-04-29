@@ -475,7 +475,9 @@ export async function extractBankStatementHybridFromImage(opts: {
     errorsCollected.push(msg);
   }
 
-  const deterministicText = [ocrText, ...Object.values(aiRawByModel)].filter((s) => s.trim().length > 0).join("\n\n--- AI_RAW ---\n\n");
+  // IMPORTANTE: parser determinístico só sobre OCR puro. Concatenar JSON da IA
+  // contamina a última descrição com o cabeçalho "--- AI_RAW ---" e quebra blocos.
+  const deterministicText = ocrText.trim();
 
   if (deterministicText.trim().length > 0) {
     const regexTxs = parseExtratoFromText(deterministicText);
