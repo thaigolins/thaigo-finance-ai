@@ -60,12 +60,12 @@ export const monthlyData = [
 ];
 
 export const categoryData = [
-  { name: "Moradia", value: 4580, color: "oklch(0.82 0.22 152)" },
-  { name: "Alimentação", value: 1820, color: "oklch(0.70 0.18 180)" },
-  { name: "Transporte", value: 680, color: "oklch(0.75 0.18 220)" },
-  { name: "Lazer", value: 920, color: "oklch(0.78 0.17 75)" },
-  { name: "Saúde", value: 1399, color: "oklch(0.65 0.22 25)" },
-  { name: "Assinaturas", value: 220, color: "oklch(0.70 0.15 300)" },
+  { name: "Moradia", value: 4580, color: "oklch(0.68 0.11 158)" },
+  { name: "Alimentação", value: 1820, color: "oklch(0.65 0.08 210)" },
+  { name: "Transporte", value: 680, color: "oklch(0.72 0.10 240)" },
+  { name: "Lazer", value: 920, color: "oklch(0.76 0.10 85)" },
+  { name: "Saúde", value: 1399, color: "oklch(0.62 0.14 25)" },
+  { name: "Assinaturas", value: 220, color: "oklch(0.55 0.04 200)" },
 ];
 
 export const upcomingBills = [
