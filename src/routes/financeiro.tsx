@@ -222,9 +222,26 @@ function FinanceiroPage() {
         </section>
 
         <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-card">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-sm font-semibold">Movimentações recentes</h3>
             <div className="flex items-center gap-2">
+              {accounts.length > 0 && (
+                <Select value={accountFilter} onValueChange={setAccountFilter}>
+                  <SelectTrigger className="h-8 w-[180px] border-border/60 text-xs">
+                    <SelectValue placeholder="Filtrar conta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as contas</SelectItem>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.bank}
+                        {a.account_number ? ` · ${a.account_number}` : ""}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="none">Sem conta vinculada</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
               <Wallet className="h-4 w-4 text-muted-foreground" />
               <FormDialog<TxForm>
                 title="Nova transação"
@@ -274,7 +291,7 @@ function FinanceiroPage() {
               />
             </div>
           </div>
-          {txs.length === 0 ? (
+          {sortedTxs.length === 0 ? (
             <EmptyState
               icon={Wallet}
               title="Sem movimentações"
@@ -283,30 +300,43 @@ function FinanceiroPage() {
             />
           ) : (
             <div className="divide-y divide-border/60">
-              {txs.map((t) => {
+              {sortedTxs.map((t, idx) => {
                 const positive = t.kind === "income" || Number(t.amount) > 0;
+                const accountName = accounts.find((a) => a.id === t.bank_account_id)?.bank ?? "Sem conta vinculada";
+                const prevKey = idx > 0 ? (sortedTxs[idx - 1].bank_account_id ?? "~none") : null;
+                const currKey = t.bank_account_id ?? "~none";
+                const showHeader = prevKey !== currKey;
                 return (
-                  <div key={t.id} className="flex items-center justify-between py-3">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-9 w-9 items-center justify-center rounded-full ${
-                          positive ? "bg-success/10 text-success" : "bg-muted/50 text-muted-foreground"
-                        }`}
-                      >
-                        {positive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                  <div key={t.id}>
+                    {showHeader && (
+                      <div className="flex items-center gap-2 pt-4 pb-2 first:pt-0">
+                        <Building2 className="h-3.5 w-3.5 text-primary" />
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          {accountName}
+                        </span>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium">{t.description}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {t.occurred_at} ·{" "}
-                          {accounts.find((a) => a.id === t.bank_account_id)?.bank ?? "Sem conta"}
-                        </p>
+                    )}
+                    <div className="flex items-center justify-between py-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`flex h-9 w-9 items-center justify-center rounded-full ${
+                            positive ? "bg-success/10 text-success" : "bg-muted/50 text-muted-foreground"
+                          }`}
+                        >
+                          {positive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{t.description}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {t.occurred_at} · {accountName}
+                          </p>
+                        </div>
                       </div>
+                      <span className={`text-sm font-semibold ${positive ? "text-success" : "text-foreground"}`}>
+                        {positive ? "+" : "-"}
+                        {formatBRL(Math.abs(Number(t.amount)))}
+                      </span>
                     </div>
-                    <span className={`text-sm font-semibold ${positive ? "text-success" : "text-foreground"}`}>
-                      {positive ? "+" : "-"}
-                      {formatBRL(Math.abs(Number(t.amount)))}
-                    </span>
                   </div>
                 );
               })}
