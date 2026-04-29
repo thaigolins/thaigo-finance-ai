@@ -395,18 +395,32 @@ function ChatPage() {
         try {
           // Extrato bancário usa o motor novo (documentImportEngine).
           if (ek === "extrato") {
-            const r = await startImportFn({
-              data: {
-                bucket: att.bucket as "invoices" | "bank-statements" | "payslips" | "fgts-statements" | "loan-contracts" | "images",
-                path: att.path,
-                filename: att.filename,
-                mime: att.mime || (att.bucket === "images" ? "image/jpeg" : "application/pdf"),
-                kind: "extrato",
-                uploadedFileId: uploadedFileId ?? undefined,
-                conversationId: convId!,
-              },
-            });
-            if (r.ok) {
+            let r: any;
+            try {
+              r = await startImportFn({
+                data: {
+                  bucket: att.bucket as "invoices" | "bank-statements" | "payslips" | "fgts-statements" | "loan-contracts" | "images",
+                  path: att.path,
+                  filename: att.filename,
+                  mime: att.mime || (att.bucket === "images" ? "image/jpeg" : "application/pdf"),
+                  kind: "extrato",
+                  uploadedFileId: uploadedFileId ?? undefined,
+                  conversationId: convId!,
+                },
+              });
+              console.log("[chat] startImport response", r, "typeof=", typeof r, "keys=", r && Object.keys(r));
+            } catch (thrown) {
+              console.error("[chat] startImport THREW", thrown);
+              const msg = thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : JSON.stringify(thrown);
+              await persistMessage(
+                convId!,
+                "assistant",
+                `DEBUG v3 · startImport lançou exceção: ${msg}`,
+                [],
+              );
+              return false;
+            }
+            if (r && r.ok) {
               const intro = `Li seu **extrato** (\`${att.filename}\`) e identifiquei **${r.totalCount} lançamento(s)**${r.duplicateCount > 0 ? ` · ${r.duplicateCount} possível(eis) duplicata(s)` : ""}. Revise antes de gravar.`;
               await persistMessage(convId!, "assistant", intro, [], {
                 importSession: {
