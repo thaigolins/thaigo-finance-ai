@@ -379,15 +379,15 @@ const ConfirmInput = z.object({
   ids: z.array(z.string().uuid()).min(1),
   bankAccountId: z.string().uuid().nullish(),
   allowDuplicates: z.boolean().optional(),
+  token: z.string().min(1),
 });
 
 export const confirmStaging = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d) => ConfirmInput.parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase: sbTyped, userId } = context;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = sbTyped as any;
+  .handler(async ({ data }) => {
+    const auth = await authFromToken(data.token);
+    if (!auth.ok) return { ok: false as const, error: auth.error };
+    const { supabase, userId } = auth;
 
     const sess = await supabase
       .from("import_sessions")
