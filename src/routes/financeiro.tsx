@@ -86,6 +86,20 @@ function FinanceiroPage() {
 
   const total = accounts.reduce((s, a) => s + Number(a.balance), 0);
 
+  const [accountFilter, setAccountFilter] = useState<string>("all");
+  const filteredTxs = accountFilter === "all"
+    ? txs
+    : accountFilter === "none"
+      ? txs.filter((t) => !t.bank_account_id)
+      : txs.filter((t) => t.bank_account_id === accountFilter);
+  // Ordena por conta para que o separador funcione, mantendo data desc dentro
+  const sortedTxs = [...filteredTxs].sort((a, b) => {
+    const aKey = a.bank_account_id ?? "~none";
+    const bKey = b.bank_account_id ?? "~none";
+    if (aKey !== bKey) return aKey.localeCompare(bKey);
+    return (b.occurred_at ?? "").localeCompare(a.occurred_at ?? "");
+  });
+
   const accountTrigger = (
     <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
       <Plus className="mr-1.5 h-4 w-4" /> Nova conta
