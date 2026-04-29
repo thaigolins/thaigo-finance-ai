@@ -28,7 +28,7 @@ function MetasPage() {
             <h2 className="text-lg font-semibold">Metas em andamento</h2>
             <p className="text-sm text-muted-foreground">{goals.length} objetivos ativos</p>
           </div>
-          <Button className="bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90">
+          <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
             <Plus className="mr-1.5 h-4 w-4"/> Nova meta
           </Button>
         </div>

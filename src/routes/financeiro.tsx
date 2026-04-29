@@ -31,7 +31,7 @@ function FinanceiroPage() {
         <section>
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Contas bancárias</h3>
-            <Button size="sm" className="bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90">
+            <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
               <Plus className="mr-1.5 h-4 w-4" /> Nova conta
             </Button>
           </div>

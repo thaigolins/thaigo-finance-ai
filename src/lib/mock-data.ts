@@ -6,9 +6,9 @@ export const accounts = [
 ];
 
 export const cards = [
-  { id: "1", name: "Nubank Ultravioleta", brand: "Mastercard", limit: 25000, used: 8430.22, dueDay: 10, closingDay: 3, color: "from-zinc-800 to-zinc-950" },
-  { id: "2", name: "Itaú Personnalité Black", brand: "Visa Infinite", limit: 40000, used: 15200.5, dueDay: 15, closingDay: 8, color: "from-orange-900 to-zinc-900" },
-  { id: "3", name: "BTG Black", brand: "Mastercard Black", limit: 60000, used: 4220.0, dueDay: 20, closingDay: 13, color: "from-emerald-900 to-zinc-950" },
+  { id: "1", name: "Nubank Ultravioleta", brand: "Mastercard Black", limit: 25000, used: 8430.22, dueDay: 10, closingDay: 3, variant: "graphite" as const },
+  { id: "2", name: "Itaú Personnalité Black", brand: "Visa Infinite", limit: 40000, used: 15200.5, dueDay: 15, closingDay: 8, variant: "obsidian" as const },
+  { id: "3", name: "BTG Black", brand: "Mastercard Black", limit: 60000, used: 4220.0, dueDay: 20, closingDay: 13, variant: "emerald" as const },
 ];
 
 export const transactions = [
@@ -60,12 +60,12 @@ export const monthlyData = [
 ];
 
 export const categoryData = [
-  { name: "Moradia", value: 4580, color: "oklch(0.82 0.22 152)" },
-  { name: "Alimentação", value: 1820, color: "oklch(0.70 0.18 180)" },
-  { name: "Transporte", value: 680, color: "oklch(0.75 0.18 220)" },
-  { name: "Lazer", value: 920, color: "oklch(0.78 0.17 75)" },
-  { name: "Saúde", value: 1399, color: "oklch(0.65 0.22 25)" },
-  { name: "Assinaturas", value: 220, color: "oklch(0.70 0.15 300)" },
+  { name: "Moradia", value: 4580, color: "oklch(0.68 0.11 158)" },
+  { name: "Alimentação", value: 1820, color: "oklch(0.65 0.08 210)" },
+  { name: "Transporte", value: 680, color: "oklch(0.72 0.10 240)" },
+  { name: "Lazer", value: 920, color: "oklch(0.76 0.10 85)" },
+  { name: "Saúde", value: 1399, color: "oklch(0.62 0.14 25)" },
+  { name: "Assinaturas", value: 220, color: "oklch(0.55 0.04 200)" },
 ];
 
 export const upcomingBills = [

@@ -43,7 +43,7 @@ function InvestimentosPage() {
               </Badge>
               <span className="text-xs text-muted-foreground">12 meses</span>
             </div>
-            <Button className="mt-5 bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90">
+            <Button className="mt-5 bg-primary text-primary-foreground hover:bg-primary/90">
               <Plus className="mr-1.5 h-4 w-4"/> Novo aporte
             </Button>
           </div>
