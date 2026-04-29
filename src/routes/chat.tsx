@@ -153,6 +153,9 @@ function smartReply(text: string, attachments: AttachmentMeta[]): string {
     if (att.kind === "contracheque") {
       return `Recebi o **contracheque** (\`${att.filename}\`). Vou extrair empregador, salário bruto, líquido, INSS, IRRF e FGTS quando o processamento por IA for ativado.`;
     }
+    if (att.kind === "imagem") {
+      return `Recebi sua imagem **${att.filename}**. Posso extrair os dados — me diga o que ela contém: **extrato**, **fatura**, **FGTS**, **dívida/empréstimo** ou **contracheque**? Ex.: _"faça lançamentos desse anexo (extrato)"_.`;
+    }
     return `Arquivo \`${att.filename}\` anexado e arquivado com segurança.`;
   }
 
