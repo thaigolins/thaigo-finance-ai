@@ -271,11 +271,18 @@ function ChatPage() {
 
       // Upload anexos
       const attachments: AttachmentMeta[] = [];
+      const kindToEnum: Record<string, "invoice_pdf" | "bank_statement" | "payslip" | "fgts_statement" | "loan_contract" | "image" | "other"> = {
+        fatura: "invoice_pdf",
+        extrato: "bank_statement",
+        contracheque: "payslip",
+        fgts: "fgts_statement",
+        contrato: "loan_contract",
+        imagem: "image",
+      };
       for (const file of filesToSend) {
         const { bucket, kind } = classifyAttachment(file);
         const up = await uploadFile({ bucket, userId: user.id, file, prefix: "chat" });
         attachments.push({ filename: up.filename, bucket, path: up.path, mime: up.mime, size: up.size, kind });
-        // Registra em uploaded_files
         await supabase.from("uploaded_files").insert({
           user_id: user.id,
           bucket,
@@ -283,7 +290,7 @@ function ChatPage() {
           filename: up.filename,
           mime_type: up.mime,
           size_bytes: up.size,
-          kind: kind === "fatura" ? "fatura" : kind === "fgts" ? "fgts" : kind === "contrato" ? "contrato" : kind === "contracheque" ? "contracheque" : kind === "extrato" ? "extrato" : "other",
+          kind: kindToEnum[kind] ?? "other",
         });
       }
 
