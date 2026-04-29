@@ -248,7 +248,7 @@ export const startImport = createServerFn({ method: "POST" })
       },
     });
 
-    return {
+    const payload = {
       ok: true as const,
       sessionId,
       totalCount: valid.length,
@@ -261,6 +261,8 @@ export const startImport = createServerFn({ method: "POST" })
       periodEnd: result.period_end ?? null,
       errors: allErrors,
     };
+    console.log("[startImport] RETURNING", JSON.stringify(payload));
+    return payload;
   });
 
 const ListInput = z.object({ sessionId: z.string().uuid() });
