@@ -732,7 +732,12 @@ function ChatPage() {
                 );
               })
             )}
-            {sending && (
+            {processingAttachment && (
+              <div className="flex items-center gap-2 rounded-xl border border-primary/30 bg-emerald-soft px-3 py-2 text-xs text-primary">
+                <Loader2 className="h-3 w-3 animate-spin" /> Processando anexo com IA...
+              </div>
+            )}
+            {sending && !processingAttachment && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" /> Pensando...
               </div>
