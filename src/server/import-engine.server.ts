@@ -104,7 +104,10 @@ async function callGateway(
     messages,
     temperature: 0.1,
   };
-  if (opts.jsonMode) body.response_format = { type: "json_object" };
+  const isGemini = model.startsWith("google/");
+  if (opts.jsonMode && !isGemini) {
+    body.response_format = { type: "json_object" };
+  }
 
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -190,8 +193,9 @@ function inferKind(descAndContext: string, amountIsNegative: boolean, hasMinusBe
 }
 
 function normalizeDate(dateStr: string, yearHint: number): string | null {
+  const cleaned = dateStr.replace(/^(seg|ter|qua|qui|sex|s[aá]b|dom)[,.]?\s*/i, "").trim();
   // dd/mm[/yyyy]
-  let m = dateStr.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  let m = cleaned.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
   if (m) {
     const dd = m[1].padStart(2, "0");
     const mm = m[2].padStart(2, "0");
@@ -200,7 +204,7 @@ function normalizeDate(dateStr: string, yearHint: number): string | null {
     return `${yyyy}-${mm}-${dd}`;
   }
   // "23 de abr" / "23 abr 2026" / "24 de abr - 2026" / "24 de abr-2026"
-  m = dateStr.match(/^(\d{1,2})\s+(?:de\s+)?([a-zç]{3,})\.?(?:\s*[-–de\s]+\s*(\d{2,4}))?$/i);
+  m = cleaned.match(/^(\d{1,2})\s+(?:de\s+)?([a-zç]{3,})\.?(?:\s*[-–de\s]+\s*(\d{2,4}))?$/i);
   if (m) {
     const dd = m[1].padStart(2, "0");
     const monKey = m[2].slice(0, 3).toLowerCase().replace("ç", "c");
@@ -237,13 +241,25 @@ export function parseExtratoFromText(text: string): RawTx[] {
   let pendingAmountLine: string | null = null;
 
   const flushBuffer = (amountLine: string) => {
-    if (!currentDate) return;
+    if (!currentDate) {
+      buffer = [];
+      return;
+    }
     const amt = parseBrAmount(amountLine.match(AMOUNT_RE_GLOBAL)?.[0] ?? "");
-    if (!amt) return;
+    if (!amt) {
+      buffer = [];
+      return;
+    }
     const hasMinusBeforeAmount = /[-−–—]\s*R?\$?\s*\d/.test(amountLine);
     const desc = buffer.join(" ").replace(/\s+/g, " ").trim();
-    if (!desc) return;
-    if (isLikelyHeaderOrBalance(desc)) return;
+    if (!desc) {
+      buffer = [];
+      return;
+    }
+    if (isLikelyHeaderOrBalance(desc)) {
+      buffer = [];
+      return;
+    }
     const kind = inferKind(desc, amt.isNegative, hasMinusBeforeAmount);
     txs.push({
       occurred_at: currentDate,
@@ -253,6 +269,7 @@ export function parseExtratoFromText(text: string): RawTx[] {
       category_hint: /pix/i.test(desc) ? "pix" : /ted/i.test(desc) ? "ted" : /doc/i.test(desc) ? "doc" : /boleto/i.test(desc) ? "boleto" : /sal[aá]rio/i.test(desc) ? "salario" : /tarifa/i.test(desc) ? "tarifa" : null,
       confidence: 0.5,
     });
+    buffer = [];
   };
 
   for (const line of lines) {
@@ -320,10 +337,9 @@ export function parseExtratoFromText(text: string): RawTx[] {
       const lastAmt = amounts[amounts.length - 1];
       const idx = line.lastIndexOf(lastAmt);
       const beforeAmt = line.slice(0, idx).trim();
-      if (beforeAmt && !isLikelyHeaderOrBalance(beforeAmt)) buffer.push(beforeAmt);
       if (beforeAmt) {
+        buffer.push(beforeAmt);
         flushBuffer(lastAmt);
-        buffer = [];
       } else {
         pendingAmountLine = lastAmt;
       }
