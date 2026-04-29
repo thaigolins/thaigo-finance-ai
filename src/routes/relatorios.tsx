@@ -39,9 +39,7 @@ function RelatoriosPage() {
             <h2 className="text-lg font-semibold">Relatório financeiro</h2>
             <p className="text-sm text-muted-foreground">Abril de 2026 · Visão executiva</p>
           </div>
-          <Button variant="outline" className="border-border/60">
-            <Download className="mr-1.5 h-4 w-4"/> Exportar PDF
-          </Button>
+          <ExportPdfDialog module="Relatórios" />
         </div>
 
         <section className="grid gap-4 md:grid-cols-3">
