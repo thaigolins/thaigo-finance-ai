@@ -188,52 +188,82 @@ function ExtratosPage() {
             description="Importe um extrato bancário ou registre transações em Financeiro para visualizar seu histórico aqui."
           />
         ) : (
-          <section className="space-y-4">
-            {Object.entries(grouped).map(([date, items]) => {
-              const dayTotal = items.reduce(
-                (s, i) => s + (i.kind === "income" ? Number(i.amount) : -Math.abs(Number(i.amount))),
+          <section className="space-y-6">
+            {accountGroups.map((group) => {
+              const accountTotal = group.txs.reduce(
+                (s, t) => s + (t.kind === "income" ? Number(t.amount) : -Math.abs(Number(t.amount))),
                 0,
               );
+              const grouped = group.txs.reduce<Record<string, Tx[]>>((acc, t) => {
+                (acc[t.occurred_at] ||= []).push(t);
+                return acc;
+              }, {});
               return (
-                <div key={date} className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-card">
-                  <div className="flex items-center justify-between border-b border-border/60 bg-muted/20 px-5 py-3">
-                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{date}</span>
-                    <span className={`text-xs font-semibold ${dayTotal >= 0 ? "text-success" : "text-foreground"}`}>
-                      {dayTotal >= 0 ? "+" : ""}
-                      {formatBRL(dayTotal)}
+                <div key={group.account.id} className="space-y-3">
+                  <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-card px-5 py-3 shadow-card">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                        <Landmark className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">{group.account.bank}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {group.txs.length} lançamento{group.txs.length === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`text-sm font-semibold ${accountTotal >= 0 ? "text-success" : "text-foreground"}`}>
+                      {accountTotal >= 0 ? "+" : ""}
+                      {formatBRL(accountTotal)}
                     </span>
                   </div>
-                  <div className="divide-y divide-border/60">
-                    {items.map((t) => {
-                      const positive = t.kind === "income";
-                      return (
-                        <div key={t.id} className="flex items-center justify-between px-5 py-3">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                                positive ? "bg-success/10 text-success" : "bg-muted/50 text-muted-foreground"
-                              }`}
-                            >
-                              {positive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">{t.description}</p>
-                              <div className="mt-0.5 flex items-center gap-2">
-                                <Badge variant="outline" className="border-border/60 py-0 text-[10px]">
-                                  {t.kind}
-                                </Badge>
-                                <span className="text-xs text-muted-foreground">{accountName(t.bank_account_id)}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <span className={`text-sm font-semibold ${positive ? "text-success" : "text-foreground"}`}>
-                            {positive ? "+" : "-"}
-                            {formatBRL(Math.abs(Number(t.amount)))}
+                  {Object.entries(grouped).map(([date, items]) => {
+                    const dayTotal = items.reduce(
+                      (s, i) => s + (i.kind === "income" ? Number(i.amount) : -Math.abs(Number(i.amount))),
+                      0,
+                    );
+                    return (
+                      <div key={date} className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-card">
+                        <div className="flex items-center justify-between border-b border-border/60 bg-muted/20 px-5 py-3">
+                          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{date}</span>
+                          <span className={`text-xs font-semibold ${dayTotal >= 0 ? "text-success" : "text-foreground"}`}>
+                            {dayTotal >= 0 ? "+" : ""}
+                            {formatBRL(dayTotal)}
                           </span>
                         </div>
-                      );
-                    })}
-                  </div>
+                        <div className="divide-y divide-border/60">
+                          {items.map((t) => {
+                            const positive = t.kind === "income";
+                            return (
+                              <div key={t.id} className="flex items-center justify-between px-5 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                                      positive ? "bg-success/10 text-success" : "bg-muted/50 text-muted-foreground"
+                                    }`}
+                                  >
+                                    {positive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium">{t.description}</p>
+                                    <div className="mt-0.5 flex items-center gap-2">
+                                      <Badge variant="outline" className="border-border/60 py-0 text-[10px]">
+                                        {t.kind}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                </div>
+                                <span className={`text-sm font-semibold ${positive ? "text-success" : "text-foreground"}`}>
+                                  {positive ? "+" : "-"}
+                                  {formatBRL(Math.abs(Number(t.amount)))}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
