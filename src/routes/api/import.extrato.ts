@@ -193,7 +193,8 @@ export const Route = createFileRoute("/api/import/extrato")({
             duplicate_count: dupes.length,
             error_count: allErrors.length,
             errors: allErrors.length > 0 ? allErrors : null,
-            raw_extraction: (result.raw ?? null) as unknown as Record<string, unknown> | null,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            raw_extraction: (result.raw ?? null) as any,
           })
           .eq("id", sessionId);
 
