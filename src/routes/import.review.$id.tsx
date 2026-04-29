@@ -127,12 +127,24 @@ function ReviewPage() {
         toast.error(r.error);
         return;
       }
-      setSession(r.session as Session);
+      const sess = r.session as Session;
+      setSession(sess);
       const items = (r.transactions as Tx[]).filter((t) => t.status !== "discarded");
       setTxs(items);
       // Pré-seleciona pending (não duplicatas)
       setSelected(new Set(items.filter((t) => t.status === "pending").map((t) => t.id)));
-      setBankAccountId((r.session as Session).bank_account_id ?? null);
+      // Vincula conta: usa bank_account_id se já houver, senão tenta match por bank_hint
+      if (sess.bank_account_id) {
+        setBankAccountId(sess.bank_account_id);
+      } else if (sess.bank_hint) {
+        const hint = sess.bank_hint.toLowerCase();
+        const accs = accounts;
+        const matched = accs.find((a) => a.bank?.toLowerCase().includes(hint));
+        if (matched) setBankAccountId(matched.id);
+        else setBankAccountId(null);
+      } else {
+        setBankAccountId(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -475,7 +487,7 @@ function ReviewPage() {
                             <Input
                               type="number"
                               step="0.01"
-                              value={Number(t.amount)}
+                              value={Number(t.amount).toFixed(2)}
                               onChange={(e) => onPatch(t.id, { amount: parseFloat(e.target.value) })}
                               className={cn(
                                 "h-8 text-right text-xs",
