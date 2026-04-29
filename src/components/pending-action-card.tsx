@@ -443,7 +443,7 @@ export function PendingActionCard({
 
               {hasTxs && showTxs && txs.length > 0 && (
                 <div className="rounded-xl border border-border/30 bg-muted/10">
-                  <div className="flex items-center justify-between gap-2 border-b border-border/30 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/30 px-3 py-2">
                     <div className="flex items-center gap-2">
                       <Checkbox
                         checked={allSelected ? true : noneSelected ? false : "indeterminate"}
@@ -453,22 +453,39 @@ export function PendingActionCard({
                         {selectedTx.size} de {txs.length} selecionados
                       </span>
                     </div>
-                    <div className="flex gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1">
                       <button
                         type="button"
                         onClick={() => setSelectedTx(new Set(txs.map((_, i) => i)))}
-                        className="text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                        className="rounded-md border border-border/40 px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground hover:bg-muted/30 hover:text-foreground"
                       >
-                        Todos
+                        Selecionar todos
                       </button>
-                      <span className="text-muted-foreground/50">·</span>
                       <button
                         type="button"
                         onClick={() => setSelectedTx(new Set())}
-                        className="text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                        className="rounded-md border border-border/40 px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground hover:bg-muted/30 hover:text-foreground"
                       >
-                        Nenhum
+                        Limpar seleção
                       </button>
+                      {action.kind === "extrato" && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => selectByKind("income")}
+                            className="rounded-md border border-success/40 bg-success/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-success hover:bg-success/10"
+                          >
+                            Só créditos
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => selectByKind("expense")}
+                            className="rounded-md border border-destructive/40 bg-destructive/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-destructive hover:bg-destructive/10"
+                          >
+                            Só débitos
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="max-h-64 overflow-auto">
@@ -478,36 +495,78 @@ export function PendingActionCard({
                           <th className="w-8 px-3 py-2"></th>
                           <th className="px-2 py-2">Data</th>
                           <th className="px-2 py-2">Descrição</th>
+                          {action.kind === "extrato" && <th className="px-2 py-2">Tipo</th>}
                           <th className="px-2 py-2 text-right">Valor</th>
                         </tr>
                       </thead>
                       <tbody>
                         {txs.map((t, i) => {
                           const checked = selectedTx.has(i);
+                          const isIncome = String(t.kind) === "income";
                           return (
                             <tr
                               key={i}
+                              onClick={() => toggleOne(i)}
                               className={cn(
-                                "border-t border-border/20",
+                                "cursor-pointer border-t border-border/20 hover:bg-muted/20",
                                 !checked && "opacity-50",
                               )}
                             >
-                              <td className="px-3 py-1.5">
+                              <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
                                 <Checkbox checked={checked} onCheckedChange={() => toggleOne(i)} />
                               </td>
                               <td className="px-2 py-1.5 text-muted-foreground">{String(t.occurred_at ?? "—").slice(0, 10)}</td>
                               <td className="px-2 py-1.5 text-foreground">{String(t.description ?? "—")}</td>
-                              <td className="px-2 py-1.5 text-right font-medium text-foreground">{fmtCurrency(t.amount)}</td>
+                              {action.kind === "extrato" && (
+                                <td className="px-2 py-1.5">
+                                  <span className={cn(
+                                    "rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wider",
+                                    isIncome ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive",
+                                  )}>
+                                    {isIncome ? "crédito" : "débito"}
+                                  </span>
+                                </td>
+                              )}
+                              <td className={cn(
+                                "px-2 py-1.5 text-right font-medium",
+                                action.kind === "extrato"
+                                  ? isIncome ? "text-success" : "text-destructive"
+                                  : "text-foreground",
+                              )}>
+                                {fmtCurrency(t.amount)}
+                              </td>
                             </tr>
                           );
                         })}
                       </tbody>
                     </table>
                   </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/30 bg-card/30 px-3 py-2 text-[11px]">
+                    {action.kind === "extrato" ? (
+                      <>
+                        <div className="flex flex-wrap gap-3">
+                          <span className="text-muted-foreground">
+                            Créditos: <span className="font-medium text-success">{fmtCurrency(selectedTotal.credit)}</span>
+                          </span>
+                          <span className="text-muted-foreground">
+                            Débitos: <span className="font-medium text-destructive">{fmtCurrency(selectedTotal.debit)}</span>
+                          </span>
+                        </div>
+                        <div className="text-muted-foreground">
+                          Saldo: <span className={cn(
+                            "font-semibold",
+                            selectedTotal.credit - selectedTotal.debit >= 0 ? "text-success" : "text-destructive",
+                          )}>{fmtCurrency(selectedTotal.credit - selectedTotal.debit)}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="ml-auto text-muted-foreground">
+                        Total selecionado: <span className="font-semibold text-foreground">{fmtCurrency(selectedTotal.sum)}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
-            </div>
-          )}
 
           {!done && (
             <div className="mt-3 flex flex-wrap gap-2">
