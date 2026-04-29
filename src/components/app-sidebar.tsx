@@ -12,7 +12,10 @@ import {
   Sparkles,
   Landmark,
   Banknote,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { Button } from "@/components/ui/button";
 
 import {
   Sidebar,
@@ -48,9 +51,15 @@ const planningItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
+  const { user, signOut } = useAuth();
   const currentPath = useRouterState({
     select: (router) => router.location.pathname,
   });
+  const displayName =
+    (user?.user_metadata?.full_name as string | undefined) ??
+    user?.email?.split("@")[0] ??
+    "Cliente";
+  const initial = displayName.charAt(0).toUpperCase();
 
   const isActive = (path: string) =>
     path === "/" ? currentPath === "/" : currentPath.startsWith(path);
