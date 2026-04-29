@@ -249,9 +249,13 @@ function ChatPage() {
     role: Message["role"],
     content: string,
     attachments: AttachmentMeta[],
+    extraMeta?: Partial<NonNullable<Message["metadata"]>>,
   ) => {
     if (!user?.id) return;
-    const metadata = attachments.length > 0 ? { attachments } : null;
+    const baseMeta: NonNullable<Message["metadata"]> = {};
+    if (attachments.length > 0) baseMeta.attachments = attachments;
+    if (extraMeta?.pendingAction) baseMeta.pendingAction = extraMeta.pendingAction;
+    const metadata = Object.keys(baseMeta).length > 0 ? baseMeta : null;
     const { error } = await supabase.from("ai_messages").insert({
       conversation_id: conversationId,
       user_id: user.id,
