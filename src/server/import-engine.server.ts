@@ -92,32 +92,119 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-async function callGateway(model: string, messages: unknown, apiKey: string) {
-  console.log("[import-engine] gateway request", { model });
+async function callGateway(
+  model: string,
+  messages: unknown,
+  apiKey: string,
+  opts: { jsonMode?: boolean } = { jsonMode: true },
+) {
+  console.log("[import-engine] gateway REQUEST", { model, jsonMode: !!opts.jsonMode });
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    temperature: 0.1,
+  };
+  if (opts.jsonMode) body.response_format = { type: "json_object" };
+
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-    }),
+    body: JSON.stringify(body),
   });
-  console.log("[import-engine] gateway response", { model, status: res.status });
+  console.log("[import-engine] gateway STATUS", { model, status: res.status, ok: res.ok });
   if (!res.ok) {
     const status = res.status;
     let detail = "";
     try { detail = await res.text(); } catch { /* ignore */ }
-    console.error("[import-engine] gateway error body", { model, status, detail: detail.slice(0, 500) });
-    if (status === 429) throw new Error("Limite de uso atingido. Aguarde e tente novamente.");
-    if (status === 402) throw new Error("Créditos do gateway de IA esgotados.");
-    throw new Error(`Gateway respondeu ${status}: ${detail.slice(0, 300)}`);
+    console.error("[import-engine] gateway ERROR BODY", { model, status, detail: detail.slice(0, 800) });
+    if (status === 429) throw new Error(`Gateway 429 (rate limit) em ${model}: ${detail.slice(0, 200)}`);
+    if (status === 402) throw new Error(`Gateway 402 (créditos esgotados) em ${model}: ${detail.slice(0, 200)}`);
+    if (status === 400) throw new Error(`Gateway 400 (bad request) em ${model}: ${detail.slice(0, 300)}`);
+    throw new Error(`Gateway ${status} em ${model}: ${detail.slice(0, 300)}`);
   }
-  const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  const json = (await res.json()) as {
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
+  };
   const content = json.choices?.[0]?.message?.content ?? "";
-  console.log("[import-engine] gateway content length", { model, len: content.length });
+  const finish = json.choices?.[0]?.finish_reason;
+  console.log("[import-engine] gateway CONTENT", {
+    model,
+    len: content.length,
+    finish_reason: finish,
+    preview: content.slice(0, 300),
+  });
   return content;
+}
+
+// OCR livre (sem JSON) — usado como fallback quando IA falha em estruturar.
+async function ocrFreeText(opts: {
+  base64: string;
+  mime: string;
+  apiKey: string;
+}): Promise<string> {
+  const messages = [
+    {
+      role: "system",
+      content:
+        "Você é um OCR. Transcreva TODO o texto visível na imagem, linha por linha, preservando ordem e valores numéricos exatamente como aparecem (vírgulas, pontos, sinais). Não invente. Não resuma. Não responda em JSON.",
+    },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: "Transcreva todo o texto desta imagem:" },
+        { type: "image_url", image_url: { url: `data:${opts.mime};base64,${opts.base64}` } },
+      ],
+    },
+  ];
+  return callGateway("google/gemini-2.5-flash", messages, opts.apiKey, { jsonMode: false });
+}
+
+// Parser regex de extrato (linhas tipo "10/04  PIX RECEBIDO JOAO  1.234,56  C")
+function parseExtratoFromText(text: string): RawTx[] {
+  const txs: RawTx[] = [];
+  const yearNow = new Date().getFullYear();
+  // captura: data dd/mm[/yyyy] ... valor brasileiro ... opcional indicador C/D ou - sinal
+  const lineRe = /(\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b)\s+(.+?)\s+(-?R?\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})\s*([CD]|cr[eé]dito|d[eé]bito|\+|-)?\s*$/gim;
+  const lines = text.split(/\r?\n/);
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    lineRe.lastIndex = 0;
+    const m = lineRe.exec(line);
+    if (!m) continue;
+    const [, dateStr, descRaw, amountStr, indicator] = m;
+    const dParts = dateStr.split("/");
+    const dd = dParts[0].padStart(2, "0");
+    const mm = dParts[1].padStart(2, "0");
+    let yyyy = dParts[2] ?? String(yearNow);
+    if (yyyy.length === 2) yyyy = (Number(yyyy) > 50 ? "19" : "20") + yyyy;
+    const occurred_at = `${yyyy}-${mm}-${dd}`;
+
+    const cleaned = amountStr.replace(/[R$\s]/g, "");
+    const isNegative = cleaned.startsWith("-");
+    const numStr = cleaned.replace(/^-/, "").replace(/\./g, "").replace(",", ".");
+    const amount = Number(numStr);
+    if (!Number.isFinite(amount) || amount === 0) continue;
+
+    let kind: "income" | "expense" = "expense";
+    const ind = (indicator ?? "").toLowerCase();
+    if (ind === "c" || ind.startsWith("cr") || ind === "+") kind = "income";
+    else if (ind === "d" || ind.startsWith("d") || ind === "-" || isNegative) kind = "expense";
+    else {
+      // Heurística textual
+      if (/\b(recebid|cr[eé]dito|dep[oó]sito|sal[aá]rio|estorno|entrada|pix recebid)/i.test(descRaw)) kind = "income";
+    }
+
+    txs.push({
+      occurred_at,
+      description: descRaw.replace(/\s+/g, " ").trim().slice(0, 200),
+      amount: Math.abs(amount),
+      kind,
+      category_hint: null,
+      confidence: 0.4,
+    });
+  }
+  return txs;
 }
 
 /**
@@ -173,9 +260,9 @@ export async function extractBankStatementFromImage(opts: {
     }
     const parsed = safeParseJson(content);
     if (!parsed || typeof parsed !== "object") {
-      const preview = content.slice(0, 200);
-      const msg = `${model}: resposta não-JSON (preview: ${preview})`;
-      console.error("[import-engine] parse failed", msg);
+      const preview = content.slice(0, 500).replace(/\s+/g, " ");
+      const msg = `${model}: parse JSON falhou (len=${content.length}, preview 500ch: ${preview})`;
+      console.error("[import-engine] PARSE FAILED", { model, len: content.length, preview });
       errorsCollected.push(msg);
       return null;
     }
@@ -197,7 +284,7 @@ export async function extractBankStatementFromImage(opts: {
         confidence: typeof r.confidence === "number" ? r.confidence : null,
       });
     }
-    console.log("[import-engine] parsed ok", { model, count: transactions.length });
+    console.log("[import-engine] PARSED OK", { model, txCount: transactions.length, bank_hint: p.bank_hint });
     return {
       method: "image_ai",
       bank_hint: typeof p.bank_hint === "string" ? p.bank_hint : null,
@@ -224,6 +311,39 @@ export async function extractBankStatementFromImage(opts: {
     const pro = await tryModel("google/gemini-2.5-pro");
     if (pro && pro.transactions.length > 0) {
       result = pro;
+    }
+  }
+
+  // Fallback: OCR livre + parser regex se nada estruturado
+  if (!result || result.transactions.length === 0) {
+    console.warn("[import-engine] FALLBACK: tentando OCR livre + regex");
+    try {
+      const ocrText = await ocrFreeText({ base64, mime, apiKey });
+      console.log("[import-engine] OCR text length", { len: ocrText.length, preview: ocrText.slice(0, 300) });
+      if (ocrText.trim().length > 0) {
+        const regexTxs = parseExtratoFromText(ocrText);
+        console.log("[import-engine] regex parser", { extracted: regexTxs.length });
+        if (regexTxs.length > 0) {
+          return {
+            method: "ai_fallback",
+            transactions: regexTxs,
+            errors: [
+              ...errorsCollected,
+              `Fallback OCR+regex usado (${regexTxs.length} lançamento(s) detectados).`,
+            ],
+            raw: { ocr_preview: ocrText.slice(0, 1000) },
+          };
+        }
+        errorsCollected.push(
+          `OCR retornou ${ocrText.length} caracteres mas o parser regex não encontrou linhas no formato esperado. Preview: ${ocrText.slice(0, 300)}`,
+        );
+      } else {
+        errorsCollected.push("OCR retornou texto vazio.");
+      }
+    } catch (e) {
+      const msg = `Fallback OCR falhou: ${e instanceof Error ? e.message : String(e)}`;
+      console.error("[import-engine]", msg);
+      errorsCollected.push(msg);
     }
   }
 
