@@ -40,6 +40,12 @@ import {
   confirmStaging,
   discardSession,
 } from "@/server/import-engine.functions";
+import { supabase } from "@/integrations/supabase/client";
+
+async function getToken(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? "";
+}
 
 export const Route = createFileRoute("/import/review/$id")({
   head: () => ({
@@ -116,7 +122,7 @@ function ReviewPage() {
   const reload = async () => {
     setLoading(true);
     try {
-      const r = await list({ data: { sessionId: id } });
+      const r = await list({ data: { sessionId: id, token: await getToken() } });
       if (!r.ok) {
         toast.error(r.error);
         return;
@@ -177,6 +183,7 @@ function ReviewPage() {
             kind: patch.kind,
             category_id: patch.category_id ?? undefined,
           },
+          token: await getToken(),
         },
       });
       if (!r.ok) toast.error(r.error);
@@ -204,6 +211,7 @@ function ReviewPage() {
           ids,
           bankAccountId: bankAccountId ?? undefined,
           allowDuplicates: allowDup,
+          token: await getToken(),
         },
       });
       if (!r.ok) {
@@ -219,7 +227,7 @@ function ReviewPage() {
 
   const onDiscard = async () => {
     if (!window.confirm("Descartar toda esta importação? Os lançamentos não confirmados serão removidos.")) return;
-    const r = await discard({ data: { sessionId: id } });
+    const r = await discard({ data: { sessionId: id, token: await getToken() } });
     if (!r.ok) {
       toast.error(r.error);
       return;

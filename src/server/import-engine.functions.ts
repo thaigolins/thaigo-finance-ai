@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware-custom";
+
 import { z } from "zod";
 import {
   extractBankStatementFromImage,
@@ -309,6 +309,22 @@ export const listSession = createServerFn({ method: "POST" })
     return { ok: true as const, session: sess.data, transactions: txs.data ?? [] };
   });
 
+// Helper: build authenticated supabase client + userId from a token in payload.
+async function authFromToken(token: string) {
+  const SUPABASE_URL = process.env.SUPABASE_URL!;
+  const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase: any = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+  });
+  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !userData?.user) {
+    return { ok: false as const, error: "Sessão inválida." };
+  }
+  return { ok: true as const, supabase, userId: userData.user.id as string };
+}
+
 const PatchSchema = z.object({
   occurred_at: z.string().nullish(),
   description: z.string().max(500).optional(),
@@ -321,15 +337,15 @@ const PatchSchema = z.object({
 const UpdateInput = z.object({
   id: z.string().uuid(),
   patch: PatchSchema,
+  token: z.string().min(1),
 });
 
 export const updateStagingTx = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d) => UpdateInput.parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase: sbTyped, userId } = context;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = sbTyped as any;
+  .handler(async ({ data }) => {
+    const auth = await authFromToken(data.token);
+    if (!auth.ok) return { ok: false as const, error: auth.error };
+    const { supabase, userId } = auth;
 
     const before = await supabase
       .from("import_staging_transactions")
@@ -363,15 +379,15 @@ const ConfirmInput = z.object({
   ids: z.array(z.string().uuid()).min(1),
   bankAccountId: z.string().uuid().nullish(),
   allowDuplicates: z.boolean().optional(),
+  token: z.string().min(1),
 });
 
 export const confirmStaging = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d) => ConfirmInput.parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase: sbTyped, userId } = context;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = sbTyped as any;
+  .handler(async ({ data }) => {
+    const auth = await authFromToken(data.token);
+    if (!auth.ok) return { ok: false as const, error: auth.error };
+    const { supabase, userId } = auth;
 
     const sess = await supabase
       .from("import_sessions")
@@ -477,15 +493,17 @@ export const confirmStaging = createServerFn({ method: "POST" })
     return { ok: true as const, confirmedCount: staging.length, pendingCount };
   });
 
-const DiscardInput = z.object({ sessionId: z.string().uuid() });
+const DiscardInput = z.object({
+  sessionId: z.string().uuid(),
+  token: z.string().min(1),
+});
 
 export const discardSession = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d) => DiscardInput.parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase: sbTyped, userId } = context;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = sbTyped as any;
+  .handler(async ({ data }) => {
+    const auth = await authFromToken(data.token);
+    if (!auth.ok) return { ok: false as const, error: auth.error };
+    const { supabase, userId } = auth;
 
     const upd = await supabase
       .from("import_sessions")
