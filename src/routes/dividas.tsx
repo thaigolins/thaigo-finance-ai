@@ -57,6 +57,7 @@ function DebtsPage() {
       <AppHeader
         title="Empréstimos & Dívidas"
         subtitle="Gestão consolidada de endividamento"
+        exportModule="Empréstimos & Dívidas"
       />
       <main className="flex-1 space-y-8 p-4 md:p-8">
         {/* KPIs */}

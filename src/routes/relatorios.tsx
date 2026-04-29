@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Download, FileBarChart } from "lucide-react";
+import { FileBarChart } from "lucide-react";
+import { ExportPdfDialog } from "@/components/export-pdf-dialog";
 import {
   Bar,
   BarChart,
@@ -31,16 +32,14 @@ export const Route = createFileRoute("/relatorios")({
 function RelatoriosPage() {
   return (
     <>
-      <AppHeader title="Relatórios" subtitle="Análise mensal" />
+      <AppHeader title="Relatórios" subtitle="Análise mensal" exportModule="Relatórios" />
       <main className="flex-1 space-y-6 p-4 md:p-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-semibold">Relatório financeiro</h2>
             <p className="text-sm text-muted-foreground">Abril de 2026 · Visão executiva</p>
           </div>
-          <Button variant="outline" className="border-border/60">
-            <Download className="mr-1.5 h-4 w-4"/> Exportar PDF
-          </Button>
+          <ExportPdfDialog module="Relatórios" />
         </div>
 
         <section className="grid gap-4 md:grid-cols-3">

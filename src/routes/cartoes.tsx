@@ -28,7 +28,7 @@ function CartoesPage() {
   const [hideNumbers, setHideNumbers] = useState(false);
   return (
     <>
-      <AppHeader title="Cartões" subtitle="Crédito · Limites · Faturas" />
+      <AppHeader title="Cartões" subtitle="Crédito · Limites · Faturas" exportModule="Cartões" />
       <main className="flex-1 space-y-8 p-4 md:p-8">
         <div className="flex items-end justify-between gap-4">
           <div>

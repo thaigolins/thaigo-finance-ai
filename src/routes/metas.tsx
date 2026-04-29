@@ -21,7 +21,7 @@ export const Route = createFileRoute("/metas")({
 function MetasPage() {
   return (
     <>
-      <AppHeader title="Metas" subtitle="Seus objetivos financeiros" />
+      <AppHeader title="Metas" subtitle="Seus objetivos financeiros" exportModule="Metas" />
       <main className="flex-1 space-y-6 p-4 md:p-6">
         <div className="flex items-center justify-between">
           <div>

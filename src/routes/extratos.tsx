@@ -23,7 +23,7 @@ function ExtratosPage() {
   }, {});
   return (
     <>
-      <AppHeader title="Extratos" subtitle="Histórico bancário" />
+      <AppHeader title="Extratos" subtitle="Histórico bancário" exportModule="Extratos" />
       <main className="flex-1 space-y-6 p-4 md:p-6">
         <section className="flex flex-col gap-4 rounded-3xl border border-dashed border-primary/40 bg-primary/5 p-6 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-4">

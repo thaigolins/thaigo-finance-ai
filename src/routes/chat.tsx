@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Send, Sparkles, TrendingUp, PiggyBank, Receipt, Lightbulb, Paperclip, Mic, Landmark, Banknote } from "lucide-react";
+import { Send, Sparkles, TrendingUp, PiggyBank, Receipt, Lightbulb, Paperclip, Mic, Landmark, Banknote, FileDown } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { generatePdf, buildPayload, type PdfKind } from "@/lib/pdf-export";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({
@@ -33,7 +34,44 @@ const suggestions = [
   { icon: Lightbulb, label: "Otimização", desc: "Quais assinaturas posso cortar?" },
   { icon: Landmark, label: "Atualizar dívidas", desc: "Segue extrato do empréstimo, atualize minhas dívidas" },
   { icon: Banknote, label: "Atualizar FGTS", desc: "Segue extrato do FGTS, atualize meu saldo" },
+  { icon: FileDown, label: "Relatório private", desc: "Gere um relatório private consolidado de abril" },
+  { icon: FileDown, label: "PDF simples Pix", desc: "Gere um PDF simples dos Pix recebidos de abril" },
 ];
+
+function detectExport(text: string): { kind: PdfKind; module: string; period: string; filters: string[] } | null {
+  const t = text.toLowerCase();
+  const isExport = /(gere|gerar|gera|exporte|exportar|baixe|baixar|emite|emitir)/.test(t) && /(pdf|relat[óo]rio|relatorio)/.test(t);
+  if (!isExport) return null;
+  const kind: PdfKind = /(private|premium|executivo|wealth)/.test(t) ? "private" : "simples";
+  const moduleMap: { keys: string[]; module: string }[] = [
+    { keys: ["d[ií]vida", "empr[ée]stimo"], module: "Empréstimos & Dívidas" },
+    { keys: ["fgts"], module: "FGTS" },
+    { keys: ["investimento", "carteira", "portf[óo]lio"], module: "Investimentos" },
+    { keys: ["meta"], module: "Metas" },
+    { keys: ["fatura"], module: "Faturas" },
+    { keys: ["cart[ãa]o", "cartoes"], module: "Cartões" },
+    { keys: ["recorrente", "assinatura"], module: "Recorrentes" },
+    { keys: ["extrato", "pix", "lan[çc]amento", "transa[çc]"], module: "Extratos" },
+    { keys: ["financeiro", "conta banc"], module: "Financeiro" },
+    { keys: ["consolidad", "geral", "patrim[óo]nio", "dashboard"], module: "Dashboard" },
+  ];
+  let module = "Relatórios";
+  for (const m of moduleMap) {
+    if (m.keys.some((k) => new RegExp(k).test(t))) { module = m.module; break; }
+  }
+  const months: Record<string, string> = {
+    janeiro: "Janeiro/2026", fevereiro: "Fevereiro/2026", "março": "Março/2026", marco: "Março/2026",
+    abril: "Abril/2026", maio: "Maio/2026", junho: "Junho/2026", julho: "Julho/2026",
+    agosto: "Agosto/2026", setembro: "Setembro/2026", outubro: "Outubro/2026",
+    novembro: "Novembro/2026", dezembro: "Dezembro/2026",
+  };
+  let period = "Abril/2026";
+  for (const [k, v] of Object.entries(months)) { if (t.includes(k)) { period = v; break; } }
+  const filters: string[] = [];
+  if (/pix/.test(t)) filters.push("Tipo: Pix recebidos");
+  if (/consolidad/.test(t)) filters.push("Visão: Consolidada");
+  return { kind, module, period, filters };
+}
 
 function smartReply(text: string): string {
   const t = text.toLowerCase();
@@ -54,11 +92,20 @@ function ChatPage() {
     const trimmed = text.trim();
     if (!trimmed) return;
     const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: trimmed };
-    const reply: Message = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: smartReply(trimmed),
-    };
+
+    const exportReq = detectExport(trimmed);
+    let replyContent: string;
+    if (exportReq) {
+      const payload = buildPayload(exportReq.module, exportReq.period, exportReq.filters);
+      // Defer to allow message render before the download dialog
+      setTimeout(() => generatePdf(payload, exportReq.kind), 250);
+      const tipo = exportReq.kind === "private" ? "Private (executivo, com capa, índice e insights)" : "Simples (operacional, direto ao ponto)";
+      replyContent = `Perfeito. Estou gerando seu **PDF ${exportReq.kind === "private" ? "Private" : "Simples"}** do módulo **${exportReq.module}** para **${exportReq.period}**${exportReq.filters.length ? ` com filtros: ${exportReq.filters.join(", ")}` : ""}.\n\nFormato: ${tipo}.\n\nO download começará em instantes. Posso emitir uma versão complementar (${exportReq.kind === "private" ? "Simples" : "Private"}) se desejar.`;
+    } else {
+      replyContent = smartReply(trimmed);
+    }
+
+    const reply: Message = { id: crypto.randomUUID(), role: "assistant", content: replyContent };
     setMessages((m) => [...m, userMsg, reply]);
     setInput("");
   };
