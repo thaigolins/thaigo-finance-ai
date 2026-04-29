@@ -73,30 +73,9 @@ async function logAudit(supabase: any, params: {
 export const startImport = createServerFn({ method: "POST" })
   .inputValidator((d) => StartInput.parse(d))
   .handler(async ({ data }) => {
-    console.log("[startImport] MIDDLEWARE_VERSION", "manual-auth-v3", new Date().toISOString());
+    console.log("[startImport] MIDDLEWARE_VERSION", "token-in-payload-v4", new Date().toISOString());
 
-    // Auth manual: extrai token do header Authorization da requisição
-    const request = getRequest();
-    const authHeader = request?.headers?.get?.("authorization") ?? "";
-    let token = authHeader.replace(/^Bearer\s+/i, "").trim();
-
-    // Fallback: cookie sb-*-auth-token
-    if (!token && request?.headers) {
-      const cookieHeader = request.headers.get("cookie") ?? "";
-      const match = cookieHeader.match(/sb-[^=]+-auth-token=([^;]+)/);
-      if (match) {
-        try {
-          const decoded = decodeURIComponent(match[1]);
-          const parsed = JSON.parse(decoded);
-          token = parsed?.access_token ?? "";
-        } catch { /* ignore */ }
-      }
-    }
-
-    if (!token) {
-      throw new Error("Unauthorized: token ausente");
-    }
-
+    const token = data.token;
     const SUPABASE_URL = process.env.SUPABASE_URL!;
     const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
 
