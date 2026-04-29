@@ -424,7 +424,7 @@ function ChatPage() {
               const status = thrown?.status ?? thrown?.response?.status;
               const isAuth = status === 401 || /unauthor|not authenticated|jwt/i.test(String(thrown?.message ?? ""));
               const msg = isAuth
-                ? `Sessão expirada ou inválida (HTTP 401). Faça login novamente.`
+                ? `Sessão expirada. Faça login novamente.`
                 : (thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : JSON.stringify(thrown));
               await persistMessage(
                 convId!,
