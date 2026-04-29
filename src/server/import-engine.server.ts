@@ -146,12 +146,12 @@ async function ocrFreeText(opts: {
     {
       role: "system",
       content:
-        "Você é um OCR. Transcreva TODO o texto visível na imagem, linha por linha, preservando ordem e valores numéricos exatamente como aparecem (vírgulas, pontos, sinais). Não invente. Não resuma. Não responda em JSON.",
+        "Você é um OCR especializado em extratos bancários brasileiros. Transcreva TODO o texto visível na imagem, linha por linha, preservando a ordem visual e mantendo exatamente datas, descrições, nomes, valores, sinais negativos, vírgulas, pontos, 'Saldo do dia', 'Proventos' e 'Ordem de Crédito'. Não invente, não corrija, não resuma e não responda em JSON.",
     },
     {
       role: "user",
       content: [
-        { type: "text", text: "Transcreva todo o texto desta imagem:" },
+        { type: "text", text: "Transcreva linha por linha este print de extrato. Preserve cada linha separada, inclusive datas, nomes, valores com -R$, saldos e cabeçalhos." },
         { type: "image_url", image_url: { url: `data:${opts.mime};base64,${opts.base64}` } },
       ],
     },
