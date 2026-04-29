@@ -446,7 +446,13 @@ function ChatPage() {
                 periodEnd: null,
               };
               try {
-                const ls: any = await listSessionFn({ data: { sessionId: r.sessionId } });
+                const { data: sessData2 } = await supabase.auth.getSession();
+                const ls: any = await listSessionFn({
+                  data: {
+                    sessionId: r.sessionId,
+                    token: sessData2.session?.access_token ?? token,
+                  },
+                });
                 if (ls?.ok && ls.session) {
                   const s = ls.session;
                   summary = {
