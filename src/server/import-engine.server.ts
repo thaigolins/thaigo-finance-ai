@@ -473,6 +473,17 @@ export async function extractBankStatementHybridFromImage(opts: {
       parser_count: 0,
       ocr_preview: ocrText.slice(0, 500),
     });
+    return {
+      method: "image_ai",
+      transactions: [],
+      errors: errorsCollected,
+      raw: {
+        ...(typeof result?.raw === "object" && result.raw ? result.raw as Record<string, unknown> : {}),
+        ocr_text: ocrText,
+        parser_count: 0,
+        parser_errors: errorsCollected,
+      },
+    };
   } else {
     errorsCollected.push("OCR livre retornou texto vazio.");
   }
