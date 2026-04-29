@@ -170,7 +170,7 @@ const MES_PT: Record<string, string> = {
 };
 
 function parseBrAmount(raw: string): { amount: number; isNegative: boolean } | null {
-  const s = raw.replace(/\s/g, "");
+  const s = raw.replace(/[−–—]/g, "-").replace(/\s/g, "");
   const isNegative = /^-/.test(s) || /-R\$/.test(s);
   const cleaned = s.replace(/[R$]/g, "").replace(/^-/, "").replace(/\./g, "").replace(",", ".");
   const n = Number(cleaned);
@@ -217,7 +217,7 @@ function isLikelyHeaderOrBalance(line: string): boolean {
   return /\b(saldo\s+(do\s+dia|anterior|atual|final|inicial|dispon[ií]vel)|total\s+(de\s+)?(cr[eé]ditos|d[eé]bitos)|extrato|p[aá]gina|lan[çc]amentos|recentes|futuros|filtrar)\b/i.test(line);
 }
 
-const AMOUNT_RE_GLOBAL = /(-?\s*R?\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2})/g;
+const AMOUNT_RE_GLOBAL = /([-−–—]?\s*R?\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}|[-−–—]?\d+,\d{2})/g;
 const DATE_INLINE_RE = /\b(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{1,2}\s+(?:de\s+)?[a-zç]{3,}\.?(?:\s*[-–]\s*\d{2,4}|\s+(?:de\s+)?\d{2,4})?)\b/i;
 
 export function parseExtratoFromText(text: string): RawTx[] {
