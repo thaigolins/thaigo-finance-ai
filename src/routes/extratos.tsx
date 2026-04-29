@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Upload, ArrowDownRight, ArrowUpRight, FileText, Loader2, Trash2 } from "lucide-react";
+import { Upload, ArrowDownRight, ArrowUpRight, FileText, Loader2, Trash2, Landmark } from "lucide-react";
 import { useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
