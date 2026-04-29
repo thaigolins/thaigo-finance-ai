@@ -155,17 +155,18 @@ export const Route = createFileRoute("/api/import/extrato")({
             occurred_at: t.occurred_at,
             description: t.description,
             amount: t.amount,
-            kind: t.kind === "income" ? "income" : "expense",
+            kind: (t.kind === "income" ? "income" : "expense") as "income" | "expense",
             category_hint: t.category_hint ?? null,
             confidence: t.confidence ?? null,
             is_duplicate: !!dup,
             duplicate_of: dup?.existingId ?? null,
-            status: dup ? "duplicate" : "pending",
+            status: (dup ? "duplicate" : "pending") as "pending" | "duplicate",
             position: i,
             raw_data: t as unknown as Record<string, unknown>,
           };
         });
-        const ins = await supabase.from("import_staging_transactions").insert(rows);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ins = await supabase.from("import_staging_transactions").insert(rows as any);
         if (ins.error) {
           await supabase
             .from("import_sessions")

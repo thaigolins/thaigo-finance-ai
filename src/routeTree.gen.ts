@@ -23,6 +23,7 @@ import { Route as CartoesRouteImport } from './routes/cartoes'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ImportReviewIdRouteImport } from './routes/import.review.$id'
+import { Route as ApiImportExtratoRouteImport } from './routes/api/import.extrato'
 
 const RelatoriosRoute = RelatoriosRouteImport.update({
   id: '/relatorios',
@@ -94,6 +95,11 @@ const ImportReviewIdRoute = ImportReviewIdRouteImport.update({
   path: '/import/review/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiImportExtratoRoute = ApiImportExtratoRouteImport.update({
+  id: '/api/import/extrato',
+  path: '/api/import/extrato',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -109,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/metas': typeof MetasRoute
   '/recorrentes': typeof RecorrentesRoute
   '/relatorios': typeof RelatoriosRoute
+  '/api/import/extrato': typeof ApiImportExtratoRoute
   '/import/review/$id': typeof ImportReviewIdRoute
 }
 export interface FileRoutesByTo {
@@ -125,6 +132,7 @@ export interface FileRoutesByTo {
   '/metas': typeof MetasRoute
   '/recorrentes': typeof RecorrentesRoute
   '/relatorios': typeof RelatoriosRoute
+  '/api/import/extrato': typeof ApiImportExtratoRoute
   '/import/review/$id': typeof ImportReviewIdRoute
 }
 export interface FileRoutesById {
@@ -142,6 +150,7 @@ export interface FileRoutesById {
   '/metas': typeof MetasRoute
   '/recorrentes': typeof RecorrentesRoute
   '/relatorios': typeof RelatoriosRoute
+  '/api/import/extrato': typeof ApiImportExtratoRoute
   '/import/review/$id': typeof ImportReviewIdRoute
 }
 export interface FileRouteTypes {
@@ -160,6 +169,7 @@ export interface FileRouteTypes {
     | '/metas'
     | '/recorrentes'
     | '/relatorios'
+    | '/api/import/extrato'
     | '/import/review/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -176,6 +186,7 @@ export interface FileRouteTypes {
     | '/metas'
     | '/recorrentes'
     | '/relatorios'
+    | '/api/import/extrato'
     | '/import/review/$id'
   id:
     | '__root__'
@@ -192,6 +203,7 @@ export interface FileRouteTypes {
     | '/metas'
     | '/recorrentes'
     | '/relatorios'
+    | '/api/import/extrato'
     | '/import/review/$id'
   fileRoutesById: FileRoutesById
 }
@@ -209,6 +221,7 @@ export interface RootRouteChildren {
   MetasRoute: typeof MetasRoute
   RecorrentesRoute: typeof RecorrentesRoute
   RelatoriosRoute: typeof RelatoriosRoute
+  ApiImportExtratoRoute: typeof ApiImportExtratoRoute
   ImportReviewIdRoute: typeof ImportReviewIdRoute
 }
 
@@ -312,6 +325,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportReviewIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/import/extrato': {
+      id: '/api/import/extrato'
+      path: '/api/import/extrato'
+      fullPath: '/api/import/extrato'
+      preLoaderRoute: typeof ApiImportExtratoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -329,6 +349,7 @@ const rootRouteChildren: RootRouteChildren = {
   MetasRoute: MetasRoute,
   RecorrentesRoute: RecorrentesRoute,
   RelatoriosRoute: RelatoriosRoute,
+  ApiImportExtratoRoute: ApiImportExtratoRoute,
   ImportReviewIdRoute: ImportReviewIdRoute,
 }
 export const routeTree = rootRouteImport
