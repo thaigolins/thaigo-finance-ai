@@ -591,6 +591,8 @@ function ChatPage() {
             await persistMessage(convId!, "assistant", `Nenhum lançamento identificado no extrato.\n\n${reasonEx}`, []);
             return false;
           }
+          const { data: sessDataEx } = await supabase.auth.getSession();
+          const accessToken = sessDataEx.session?.access_token ?? "";
           const r = await extractDoc({
             data: {
               bucket: att.bucket as
@@ -604,6 +606,7 @@ function ChatPage() {
               filename: att.filename,
               mime: att.mime || (att.bucket === "images" ? "image/jpeg" : "application/pdf"),
               kind: ek,
+              token: accessToken,
               uploadedFileId: uploadedFileId ?? undefined,
               conversationId: convId!,
             },
