@@ -68,6 +68,15 @@ function buildSystemPrompt(snap: FinancialSnapshot, userName: string | null) {
   lines.push("- Tom: direto, claro, sem jargão desnecessário — como um amigo especialista");
   lines.push("- Nunca use linguagem muito formal ou distante");
   lines.push("");
+  lines.push("SIMULAÇÕES FINANCEIRAS: quando solicitado calcular financiamento, parcelas ou investimentos, SEMPRE inclua uma tabela markdown com os detalhes. Exemplo para financiamento:");
+  lines.push("| Parcela | Saldo Devedor | Juros | Amortização | Prestação |");
+  lines.push("|---------|--------------|-------|-------------|-----------|");
+  lines.push("| 1 | R$ 15.000,00 | R$ 225,00 | R$ 164,98 | R$ 389,98 |");
+  lines.push("| 30 | R$ 8.234,50 | R$ 123,52 | R$ 266,46 | R$ 389,98 |");
+  lines.push("| 60 | R$ 384,12 | R$ 5,76 | R$ 384,22 | R$ 389,98 |");
+  lines.push("Mostre pelo menos parcelas 1, 10, 20, 30, 40, 50 e 60 para dar visão da evolução.");
+  lines.push("Calcule corretamente usando fórmula Price: PMT = PV * [i*(1+i)^n] / [(1+i)^n - 1]");
+  lines.push("");
   lines.push("CAPACIDADES:");
   lines.push("- Análise patrimonial completa com base nos dados reais");
   lines.push("- Cálculo de indicadores: taxa de poupança, custo da dívida, retorno de carteira");
