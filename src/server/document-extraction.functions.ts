@@ -169,20 +169,25 @@ const fgtsHeaderPrompt = `Extraia apenas o cabeçalho do extrato FGTS:
   "last_movement": "YYYY-MM-DD|null"
 }`;
 
-function buildEntriesMessages(fileBase64: string, mime: string, filename: string) {
-  return [
-    {
-      role: "system",
-      content: "Você é um OCR especializado em extratos FGTS brasileiros. Extraia TODOS os lançamentos da tabela do documento.",
-    },
-    {
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: `Documento: ${filename} (${mime})
+function buildEntriesMessages(
+  fileBase64: string,
+  mime: string,
+  filename: string,
+  half: "all" | "first" | "second" = "all",
+) {
+  const halfInstruction =
+    half === "first"
+      ? `\n\nIMPORTANTE — EXTRAIA APENAS A PRIMEIRA METADE DO DOCUMENTO:\n- Extraia somente os lançamentos da PRIMEIRA METADE da tabela (cronologicamente os MAIS ANTIGOS).\n- Se o documento tem N lançamentos, retorne aproximadamente os primeiros N/2.\n- Comece pelo PRIMEIRO lançamento (mais antigo) e pare no meio da tabela.\n- NÃO inclua os lançamentos da segunda metade.`
+      : half === "second"
+        ? `\n\nIMPORTANTE — EXTRAIA APENAS A SEGUNDA METADE DO DOCUMENTO:\n- Extraia somente os lançamentos da SEGUNDA METADE da tabela (cronologicamente os MAIS RECENTES).\n- Se o documento tem N lançamentos, retorne aproximadamente os últimos N/2.\n- Comece exatamente no meio da tabela e vá até o ÚLTIMO lançamento (mais recente).\n- NÃO inclua os lançamentos da primeira metade.`
+        : "";
 
-Extraia TODOS os lançamentos desta tabela de extrato FGTS e retorne APENAS este JSON sem markdown:
+  const content: Array<Record<string, unknown>> = [
+    {
+      type: "text",
+      text: `Documento: ${filename} (${mime})
+
+Extraia os lançamentos desta tabela de extrato FGTS e retorne APENAS este JSON sem markdown:
 {
   "entries": [
     {"occurred_at": "YYYY-MM-DD", "entry_type": "deposito|jam|saque|outro", "amount": number, "notes": "descrição do lançamento"}
@@ -191,17 +196,31 @@ Extraia TODOS os lançamentos desta tabela de extrato FGTS e retorne APENAS este
 
 Regras:
 - occurred_at: data da coluna DATA no formato YYYY-MM-DD
-- entry_type: "deposito" para 115-DEPOSITO, "jam" para CREDITO DE JAM/AC CRED/AC AUT, "saque" para SAQUE DEP/SAQUE JAM
+- entry_type: "deposito" para 115-DEPOSITO, "jam" para CREDITO DE JAM/AC CRED/AC AUT/REGULARIZACAO/AC REPOSICAO, "saque" para SAQUE DEP/SAQUE JAM, "outro" para os demais
 - amount: valor POSITIVO da coluna VALOR (ignore negativos, use Math.abs)
-- notes: texto da coluna LANCAMENTO
-- Inclua ABSOLUTAMENTE TODOS os lançamentos, do primeiro ao último.
-- Não omita nenhuma linha da tabela.`,
-        },
-        {
+- notes: texto da coluna LANÇAMENTO
+- Ignore a linha "SALDO ANTERIOR"
+- Não omita nenhuma linha da metade solicitada.${halfInstruction}`,
+    },
+    mime === "application/pdf"
+      ? {
+          type: "file",
+          file: { filename, file_data: `data:${mime};base64,${fileBase64}` },
+        }
+      : {
           type: "image_url",
           image_url: { url: `data:${mime};base64,${fileBase64}` },
         },
-      ],
+  ];
+
+  return [
+    {
+      role: "system",
+      content: "Você é um OCR especializado em extratos FGTS brasileiros. Extraia lançamentos da tabela do documento conforme instruído.",
+    },
+    {
+      role: "user",
+      content,
     },
   ];
 }
