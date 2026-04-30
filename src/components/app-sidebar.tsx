@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 import {
   Sidebar,
@@ -32,8 +33,9 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-const overviewItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+const dashboardItem = { title: "Dashboard", url: "/", icon: LayoutDashboard };
+
+const financeiroItems = [
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
   { title: "Cartões", url: "/cartoes", icon: CreditCard },
   { title: "Faturas", url: "/faturas", icon: Receipt },
@@ -42,14 +44,13 @@ const overviewItems = [
 ];
 
 const dividasItem = { title: "Empréstimos & Dívidas", url: "/dividas", icon: Landmark };
+const fgtsItem = { title: "FGTS", url: "/fgts", icon: Banknote };
 
 const planningItems = [
   { title: "Metas", url: "/metas", icon: Target },
   { title: "Investimentos", url: "/investimentos", icon: TrendingUp },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
 ];
-
-const fgtsItem = { title: "FGTS", url: "/fgts", icon: Banknote };
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -100,6 +101,12 @@ export function AppSidebar() {
 
       <SidebarContent className="py-2">
         <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>{renderItem(dashboardItem)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
           {!collapsed && <SidebarGroupLabel>Inteligência</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
@@ -120,15 +127,18 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Visão Geral</SidebarGroupLabel>}
+          {!collapsed && <SidebarGroupLabel>Financeiro</SidebarGroupLabel>}
           <SidebarGroupContent>
-            <SidebarMenu>{overviewItems.map(renderItem)}</SidebarMenu>
+            <SidebarMenu>{financeiroItems.map(renderItem)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>{renderItem(dividasItem)}</SidebarMenu>
+            <SidebarMenu>
+              {renderItem(dividasItem)}
+              {renderItem(fgtsItem)}
+            </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
@@ -138,16 +148,13 @@ export function AppSidebar() {
             <SidebarMenu>{planningItems.map(renderItem)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>{renderItem(fgtsItem)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border/60 p-3 space-y-2">
-        <SidebarMenu>{renderItem({ title: "Configurações", url: "/settings", icon: Settings })}</SidebarMenu>
+      <SidebarFooter className="p-3 space-y-2">
+        <Separator className="bg-sidebar-border/60" />
+        <SidebarMenu>
+          {renderItem({ title: "Configurações", url: "/settings", icon: Settings })}
+        </SidebarMenu>
         {!collapsed ? (
           <>
             <div className="flex items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/30 p-2.5">
