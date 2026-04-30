@@ -863,7 +863,11 @@ function FgtsPage() {
                           <p className="num mt-0.5 text-[11px] text-muted-foreground">
                             {formatDatePT(e.occurred_at)}
                           </p>
-                        </div>
+                          {e.entry_type === "saque" && getFgtsCodeMeaning(e.notes ?? "") && (
+                            <p className="mt-0.5 text-[10px] italic text-muted-foreground">
+                              → {getFgtsCodeMeaning(e.notes ?? "")}
+                            </p>
+                          )}
                         <p
                           className={cn(
                             "num shrink-0 text-sm font-semibold tabular-nums",
