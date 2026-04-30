@@ -588,24 +588,38 @@ function PrivacySection() {
       const deletes = [
         "import_staging_transactions",
         "import_sessions",
+        "fgts_entries",
+        "fgts_accounts",
         "bank_transactions",
+        "invoice_transactions",
+        "invoices",
         "ai_messages",
         "ai_conversations",
         "uploaded_files",
+        "pending_ai_actions",
+        "payslips",
+        "loan_accounts",
       ];
+      let hadError = false;
       for (const t of deletes) {
         const { error } = await supabase.from(t as never).delete().eq("user_id", user.id);
         if (error) {
+          hadError = true;
           console.warn(`[wipe] ${t}:`, error.message);
+          toast.error(`Erro ao apagar ${t}: ${error.message}`);
         }
       }
       const { error: balErr } = await supabase
         .from("bank_accounts")
         .update({ balance: 0 })
         .eq("user_id", user.id);
-      if (balErr) console.warn("[wipe] bank_accounts balance:", balErr.message);
+      if (balErr) {
+        hadError = true;
+        console.warn("[wipe] bank_accounts balance:", balErr.message);
+        toast.error(`Erro ao zerar saldos: ${balErr.message}`);
+      }
 
-      toast.success("Lançamentos apagados e saldos zerados");
+      if (!hadError) toast.success("Todos os dados foram apagados com sucesso.");
       setConfirmStep(0);
     } catch (e) {
       console.error(e);
