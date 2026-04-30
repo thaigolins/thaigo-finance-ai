@@ -38,7 +38,7 @@ import {
 import { z } from "zod";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
-import { StatCard } from "@/components/stat-card";
+
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
