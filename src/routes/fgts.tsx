@@ -174,7 +174,6 @@ function getFgtsCodeMeaning(notes: string): string | null {
 
 function FgtsPage() {
   const { user } = useAuth();
-  const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
