@@ -766,38 +766,36 @@ function ChatPage() {
       if (replyContent) {
         await persistMessage(convId, "assistant", replyContent, []);
 
-        // Renomeia conversa com título inteligente gerado pela IA
+        // Renomeia conversa com título extraído da resposta da IA
         const currentConv = conversations.find((c) => c.id === convId);
         if (currentConv?.title === "Nova conversa" && replyContent) {
-          try {
-            const { data: sessData } = await supabase.auth.getSession();
-            const accessToken = sessData.session?.access_token ?? "";
-            const titleResult = await aiChat({
-              data: {
-                conversationId: convId,
-                userMessage: `Gere um título curto (máximo 4 palavras, sem pontuação final) que resuma este assunto: "${text.slice(0, 150)}"`,
-                history: [],
-                attachments: [],
-                token: accessToken,
-              },
-            });
-            const generatedTitle = titleResult.reply
-              ?.trim()
-              .replace(/["“”'']/g, "")
-              .replace(/\.$/, "")
-              .slice(0, 50);
-            if (generatedTitle && generatedTitle.length > 2) {
-              await supabase
-                .from("ai_conversations")
-                .update({ title: generatedTitle })
-                .eq("id", convId);
-              invalidateConvs();
-            }
-          } catch {
-            const fallback = text.trim().split(" ").slice(0, 4).join(" ");
+          let smartTitle = "";
+
+          // Tenta extrair título do primeiro header ## da resposta
+          const headerMatch = replyContent.match(/#{1,3}\s+([^\n]+)/);
+          if (headerMatch) {
+            smartTitle = headerMatch[1]
+              .replace(/[\u{1F300}-\u{1FFFF}]/gu, "")
+              .replace(/[*_]/g, "")
+              .trim()
+              .slice(0, 40);
+          }
+
+          // Fallback: usa as primeiras palavras significativas da mensagem do usuário
+          if (!smartTitle || smartTitle.length < 3) {
+            const words = text
+              .trim()
+              .replace(/[^\w\sáéíóúâêîôûãõàèìòùçÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ]/g, " ")
+              .split(/\s+/)
+              .filter((w) => w.length > 2)
+              .slice(0, 5);
+            smartTitle = words.join(" ");
+          }
+
+          if (smartTitle.length > 2) {
             await supabase
               .from("ai_conversations")
-              .update({ title: fallback })
+              .update({ title: smartTitle })
               .eq("id", convId);
             invalidateConvs();
           }
