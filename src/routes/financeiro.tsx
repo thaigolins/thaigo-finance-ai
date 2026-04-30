@@ -1,12 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Plus, Building2, Wallet, ArrowUpRight, ArrowDownRight, Trash2, Loader2 } from "lucide-react";
+import { Plus, Wallet, ArrowUpRight, ArrowDownRight, Trash2, Loader2, Building2 } from "lucide-react";
 import { z } from "zod";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
 import { FormDialog } from "@/components/form-dialog";
+import { BankPickerDialog } from "@/components/bank-picker-dialog";
+import { BankLogo } from "@/components/bank-logo";
+import { findBank } from "@/lib/banks";
 import {
   Select,
   SelectContent,
@@ -35,6 +38,8 @@ type BankAccount = {
   account_number: string | null;
   balance: number;
   color: string | null;
+  bank_color: string | null;
+  bank_logo: string | null;
 };
 
 type Tx = {
