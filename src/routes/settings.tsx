@@ -338,13 +338,8 @@ function AccountsSection() {
           </div>
         </div>
         <FormDialog<AccountForm>
-          open={open && editing === null}
-          onOpenChange={(o) => {
-            setOpen(o);
-            if (!o) setEditing(null);
-          }}
           trigger={
-            <Button size="sm" className="rounded-full" onClick={() => setEditing(null)}>
+            <Button size="sm" className="rounded-full">
               <Plus className="h-4 w-4" /> Nova conta
             </Button>
           }
@@ -362,8 +357,6 @@ function AccountsSection() {
           }}
           onSubmit={async (values) => {
             await insertAccount.mutateAsync(values as Record<string, unknown>);
-            toast.success("Conta criada");
-            setOpen(false);
           }}
         />
       </header>
