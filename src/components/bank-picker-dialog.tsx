@@ -1,18 +1,18 @@
-import { useMemo, useState } from "react";
-import { z } from "zod";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
-import { Loader2, Search, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
+import { ChevronLeft, Search, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -21,79 +21,132 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
-import { BANKS, type BankDef } from "@/lib/banks";
-import { BankLogo } from "@/components/bank-logo";
 
-export const accountTypeOptions = [
-  { value: "checking", label: "Conta Corrente" },
-  { value: "savings", label: "Poupança" },
-  { value: "investment", label: "Investimentos" },
-  { value: "wallet", label: "Carteira Digital" },
-  { value: "other", label: "Outros" },
-] as const;
+const BANKS = [
+  { name: "Nubank", code: "260", color: "#820AD1", initials: "NU" },
+  { name: "Itaú", code: "341", color: "#FF6600", initials: "IT" },
+  { name: "Bradesco", code: "237", color: "#CC092F", initials: "BR" },
+  { name: "Banco do Brasil", code: "001", color: "#F9C700", initials: "BB" },
+  { name: "Caixa Econômica", code: "104", color: "#005CA9", initials: "CX" },
+  { name: "Santander", code: "033", color: "#EC0000", initials: "SA" },
+  { name: "Inter", code: "077", color: "#FF6B00", initials: "IN" },
+  { name: "C6 Bank", code: "336", color: "#3D3D3D", initials: "C6" },
+  { name: "BTG Pactual", code: "208", color: "#C9A84C", initials: "BT" },
+  { name: "XP", code: "102", color: "#1A1A1A", initials: "XP" },
+  { name: "Sicoob", code: "756", color: "#007A3D", initials: "SC" },
+  { name: "Sicredi", code: "748", color: "#5FA110", initials: "SR" },
+  { name: "Safra", code: "422", color: "#1A1B4B", initials: "SF" },
+  { name: "Mercado Pago", code: "323", color: "#009EE3", initials: "MP" },
+  { name: "PicPay", code: "380", color: "#21C25E", initials: "PP" },
+  { name: "Neon", code: "536", color: "#00C4D4", initials: "NE" },
+  { name: "Banco Original", code: "212", color: "#00A859", initials: "OR" },
+  { name: "Pagseguro", code: "290", color: "#00B140", initials: "PS" },
+  { name: "Outro", code: "000", color: "#6B7280", initials: "??" },
+];
 
-const detailsSchema = z.object({
-  bank: z.string().min(1, "Banco obrigatório"),
-  account_type: z.enum(["checking", "savings", "investment", "wallet", "other"]),
-  branch: z.string().optional(),
-  account_number: z.string().optional(),
-  balance: z.number({ invalid_type_error: "Saldo inválido" }),
-});
-type DetailsForm = z.infer<typeof detailsSchema>;
+type Bank = (typeof BANKS)[number];
 
-export type AccountSubmit = DetailsForm & {
-  color: string | null;
-  bank_color: string | null;
-  bank_logo: string | null;
-};
+function BankAvatar({
+  color,
+  initials,
+  size = 48,
+}: {
+  name?: string;
+  color: string;
+  initials: string;
+  size?: number;
+}) {
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: color + "25",
+        border: `2px solid ${color}60`,
+        borderRadius: size * 0.25,
+      }}
+      className="flex flex-shrink-0 items-center justify-center"
+    >
+      <span
+        style={{
+          color,
+          fontSize: size * 0.36,
+          fontWeight: 700,
+          letterSpacing: "-0.5px",
+          lineHeight: 1,
+        }}
+      >
+        {initials}
+      </span>
+    </div>
+  );
+}
 
-type Defaults = Partial<{
+type FormValues = {
   bank: string;
-  account_type: DetailsForm["account_type"];
+  account_type: string;
   branch: string;
   account_number: string;
   balance: number;
-  bank_color: string | null;
-  bank_logo: string | null;
-}>;
+};
+
+export type AccountSubmit = FormValues & {
+  color: string;
+  bank_color: string;
+  bank_logo: null;
+};
 
 type Props = {
   trigger: React.ReactNode;
   title?: string;
   description?: string;
-  defaultValues?: Defaults;
+  defaultValues?: Partial<FormValues> & { bank_color?: string | null; bank_logo?: string | null };
   submitLabel?: string;
   onSubmit: (values: AccountSubmit) => Promise<void> | void;
 };
 
+const ACCOUNT_TYPES = [
+  { value: "checking", label: "Conta Corrente" },
+  { value: "savings", label: "Conta Poupança" },
+  { value: "salary", label: "Conta Salário" },
+  { value: "digital", label: "Conta Digital" },
+  { value: "investment", label: "Investimentos" },
+  { value: "wallet", label: "Carteira Digital" },
+  { value: "other", label: "Outros" },
+];
+
 export function BankPickerDialog({
   trigger,
   title = "Nova conta bancária",
-  description = "Selecione o banco e preencha os dados da conta.",
+  description,
   defaultValues,
   submitLabel = "Salvar conta",
   onSubmit,
 }: Props) {
-  const initialBank = useMemo<BankDef | null>(() => {
+  const initialBank = useMemo<Bank | null>(() => {
     if (!defaultValues?.bank) return null;
-    return (
-      BANKS.find((b) => b.name.toLowerCase() === defaultValues.bank!.toLowerCase()) ?? {
-        name: defaultValues.bank,
-        code: "000",
-        color: defaultValues.bank_color ?? "#6B7280",
-        logo: defaultValues.bank_logo ?? null,
-      }
+    const found = BANKS.find(
+      (b) => b.name.toLowerCase() === defaultValues.bank!.toLowerCase(),
     );
+    if (found) return found;
+    return {
+      name: defaultValues.bank,
+      code: "000",
+      color: defaultValues.bank_color ?? "#6B7280",
+      initials: defaultValues.bank.slice(0, 2).toUpperCase(),
+    };
   }, [defaultValues]);
 
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(initialBank ? 2 : 1);
-  const [selected, setSelected] = useState<BankDef | null>(initialBank);
+  const [selected, setSelected] = useState<Bank | null>(initialBank);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [accountType, setAccountType] = useState<string>(
+    defaultValues?.account_type ?? "checking",
+  );
 
-  const form = useForm<DetailsForm>({
+  const { register, handleSubmit, reset } = useForm<FormValues>({
     defaultValues: {
       bank: defaultValues?.bank ?? "",
       account_type: defaultValues?.account_type ?? "checking",
@@ -104,74 +157,61 @@ export function BankPickerDialog({
   });
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.toLowerCase().trim();
     if (!q) return BANKS;
     return BANKS.filter(
       (b) => b.name.toLowerCase().includes(q) || b.code.includes(q),
     );
   }, [search]);
 
-  function reset() {
-    setStep(initialBank ? 2 : 1);
-    setSelected(initialBank);
-    setSearch("");
-    form.reset({
-      bank: defaultValues?.bank ?? "",
-      account_type: defaultValues?.account_type ?? "checking",
-      branch: defaultValues?.branch ?? "",
-      account_number: defaultValues?.account_number ?? "",
-      balance: defaultValues?.balance ?? 0,
-    });
+  function handleOpen(v: boolean) {
+    setOpen(v);
+    if (!v) {
+      setStep(initialBank ? 2 : 1);
+      setSelected(initialBank);
+      setSearch("");
+      setAccountType(defaultValues?.account_type ?? "checking");
+      reset({
+        bank: defaultValues?.bank ?? "",
+        account_type: defaultValues?.account_type ?? "checking",
+        branch: defaultValues?.branch ?? "",
+        account_number: defaultValues?.account_number ?? "",
+        balance: defaultValues?.balance ?? 0,
+      });
+    }
   }
 
-  function pickBank(bank: BankDef) {
+  function pickBank(bank: Bank) {
     setSelected(bank);
-    if (bank.name !== "Outro") {
-      form.setValue("bank", bank.name);
-    } else {
-      form.setValue("bank", "");
-    }
     setStep(2);
   }
 
-  async function handleSubmit(raw: DetailsForm) {
-    const parsed = detailsSchema.safeParse(raw);
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "Dados inválidos");
-      return;
-    }
+  async function submit(raw: FormValues) {
     if (!selected) {
-      toast.error("Selecione um banco");
       setStep(1);
       return;
     }
     setLoading(true);
     try {
       await onSubmit({
-        ...parsed.data,
+        ...raw,
+        bank: selected.name,
+        account_type: accountType,
         color: selected.color,
         bank_color: selected.color,
-        bank_logo: selected.logo ?? null,
+        bank_logo: null,
       });
-      toast.success("Conta salva");
-      setOpen(false);
-      reset();
+      toast.success("Conta salva com sucesso!");
+      handleOpen(false);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Erro ao salvar";
-      toast.error(msg);
+      toast.error(e instanceof Error ? e.message : "Erro ao salvar");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        setOpen(v);
-        if (!v) reset();
-      }}
-    >
+    <Dialog open={open} onOpenChange={handleOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-w-2xl border-border/40 bg-card">
         <DialogHeader>
@@ -180,17 +220,19 @@ export function BankPickerDialog({
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="rounded-md p-1 text-muted-foreground hover:bg-muted/30"
+                className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted/40"
                 aria-label="Voltar"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4" />
               </button>
             )}
-            {step === 1 ? title : `${selected?.name ?? "Banco"} — dados da conta`}
+            <span>
+              {step === 1 ? title : `${selected?.name} — dados da conta`}
+            </span>
           </DialogTitle>
-          {description && step === 1 && (
+          {step === 1 && (
             <DialogDescription className="text-xs text-muted-foreground">
-              {description}
+              {description ?? "Selecione o banco para começar"}
             </DialogDescription>
           )}
         </DialogHeader>
@@ -203,28 +245,38 @@ export function BankPickerDialog({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar banco por nome ou código..."
-                className="pl-9 border-border/60 bg-muted/20"
+                className="border-border/60 bg-muted/20 pl-9"
                 autoFocus
               />
             </div>
             <div className="grid max-h-[420px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
-              {filtered.map((b) => {
-                const isSelected = selected?.name === b.name;
+              {filtered.map((bank) => {
+                const isSelected = selected?.name === bank.name;
                 return (
                   <button
-                    key={b.name}
+                    key={bank.name}
                     type="button"
-                    onClick={() => pickBank(b)}
+                    onClick={() => pickBank(bank)}
                     style={{
-                      borderColor: isSelected ? b.color : undefined,
-                      backgroundColor: isSelected ? b.color + "10" : undefined,
+                      borderColor: isSelected ? bank.color : undefined,
+                      backgroundColor: isSelected ? bank.color + "10" : undefined,
                     }}
                     className={`flex flex-col items-center gap-2 rounded-xl border p-3 text-center transition hover:border-primary/40 hover:bg-muted/20 ${
                       isSelected ? "border-2" : "border-border/40"
                     }`}
                   >
-                    <BankLogo name={b.name} logo={b.logo} color={b.color} size={48} />
-                    <span className="line-clamp-1 text-xs font-medium">{b.name}</span>
+                    <BankAvatar
+                      name={bank.name}
+                      color={bank.color}
+                      initials={bank.initials}
+                      size={48}
+                    />
+                    <span className="line-clamp-1 text-xs font-medium">
+                      {bank.name}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {bank.code}
+                    </span>
                   </button>
                 );
               })}
@@ -236,32 +288,21 @@ export function BankPickerDialog({
             </div>
           </div>
         ) : (
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4 py-2">
-            <div className="flex items-center gap-3 rounded-xl border border-border/40 bg-muted/10 p-3">
-              {selected && (
-                <BankLogo
+          <form onSubmit={handleSubmit(submit)} className="space-y-4 py-2">
+            {selected && (
+              <div className="flex items-center gap-3 rounded-xl border border-border/40 bg-muted/10 p-3">
+                <BankAvatar
                   name={selected.name}
-                  logo={selected.logo}
                   color={selected.color}
+                  initials={selected.initials}
                   size={48}
                 />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">{selected?.name}</p>
-                <p className="text-[11px] text-muted-foreground">Código {selected?.code}</p>
-              </div>
-            </div>
-
-            {selected?.name === "Outro" && (
-              <div className="space-y-1.5">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Nome do banco
-                </Label>
-                <Input
-                  {...form.register("bank")}
-                  placeholder="Digite o nome do banco"
-                  className="border-border/60 bg-muted/20"
-                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{selected.name}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Código {selected.code}
+                  </p>
+                </div>
               </div>
             )}
 
@@ -269,21 +310,14 @@ export function BankPickerDialog({
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Tipo de conta
               </Label>
-              <Select
-                value={form.watch("account_type")}
-                onValueChange={(v) =>
-                  form.setValue("account_type", v as DetailsForm["account_type"], {
-                    shouldValidate: true,
-                  })
-                }
-              >
+              <Select value={accountType} onValueChange={setAccountType}>
                 <SelectTrigger className="border-border/60 bg-muted/20">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {accountTypeOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
+                  {ACCOUNT_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -296,7 +330,7 @@ export function BankPickerDialog({
                   Agência
                 </Label>
                 <Input
-                  {...form.register("branch")}
+                  {...register("branch")}
                   placeholder="0001"
                   className="border-border/60 bg-muted/20"
                 />
@@ -306,7 +340,7 @@ export function BankPickerDialog({
                   Conta
                 </Label>
                 <Input
-                  {...form.register("account_number")}
+                  {...register("account_number")}
                   placeholder="12345-6"
                   className="border-border/60 bg-muted/20"
                 />
@@ -315,12 +349,12 @@ export function BankPickerDialog({
 
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Saldo atual
+                Saldo atual (R$)
               </Label>
               <Input
                 type="number"
                 step="0.01"
-                {...form.register("balance", { valueAsNumber: true })}
+                {...register("balance", { valueAsNumber: true })}
                 className="border-border/60 bg-muted/20"
               />
             </div>
@@ -341,7 +375,8 @@ export function BankPickerDialog({
               >
                 {loading ? (
                   <>
-                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Salvando...
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    Salvando...
                   </>
                 ) : (
                   submitLabel
