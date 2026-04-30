@@ -174,12 +174,40 @@ function smartReply(text: string, attachments: AttachmentMeta[]): string {
 // Decide qual bucket usar a partir do mime e nome
 function classifyAttachment(file: File): { bucket: StorageBucket; kind: string } {
   const name = file.name.toLowerCase();
-  if (/fatura|invoice/.test(name)) return { bucket: "invoices", kind: "fatura" };
-  if (/fgts/.test(name)) return { bucket: "fgts-statements", kind: "fgts" };
-  if (/contracheque|holerite|payslip/.test(name)) return { bucket: "payslips", kind: "contracheque" };
-  if (/contrato|emprestimo|empr[ée]stimo|loan/.test(name)) return { bucket: "loan-contracts", kind: "contrato" };
-  if (/extrato|statement/.test(name)) return { bucket: "bank-statements", kind: "extrato" };
-  if (file.type.startsWith("image/")) return { bucket: "bank-statements", kind: "extrato" };
+  const mime = file.type.toLowerCase();
+
+  // FGTS — prioridade alta, detecta antes de extrato
+  if (/fgts|caixa.*fgts|fgts.*caixa|extrato.*fgts|fgts.*extrato/.test(name))
+    return { bucket: "fgts-statements", kind: "fgts" };
+
+  // Fatura
+  if (/fatura|invoice/.test(name))
+    return { bucket: "invoices", kind: "fatura" };
+
+  // Contracheque
+  if (/contracheque|holerite|payslip/.test(name))
+    return { bucket: "payslips", kind: "contracheque" };
+
+  // FGTS pelo mime (PDF sem nome específico pode ser FGTS)
+  if (/fgts/.test(name))
+    return { bucket: "fgts-statements", kind: "fgts" };
+
+  // Empréstimo
+  if (/contrato|emprestimo|empr[ée]stimo|loan|financiamento/.test(name))
+    return { bucket: "loan-contracts", kind: "contrato" };
+
+  // Extrato bancário
+  if (/extrato|statement/.test(name))
+    return { bucket: "bank-statements", kind: "extrato" };
+
+  // Imagem — verifica se usuário pediu FGTS no texto
+  if (mime.startsWith("image/"))
+    return { bucket: "bank-statements", kind: "extrato" };
+
+  // PDF genérico — trata como extrato
+  if (mime === "application/pdf")
+    return { bucket: "bank-statements", kind: "extrato" };
+
   return { bucket: "bank-statements", kind: "extrato" };
 }
 
@@ -197,18 +225,23 @@ function detectExtractorKind(
   attKind?: string,
 ): "fatura" | "extrato" | "fgts" | "emprestimo" | "contracheque" | null {
   const t = text.toLowerCase();
-  // Mapeamento direto pelo kind do anexo (quando não é "imagem"/"other")
+
+  // FGTS — prioridade máxima
+  if (/fgts|fundo\s+de\s+garantia/.test(t)) return "fgts";
+
+  // Pelo kind do anexo
   if (attKind === "fatura") return "fatura";
   if (attKind === "extrato") return "extrato";
   if (attKind === "fgts") return "fgts";
   if (attKind === "contrato") return "emprestimo";
   if (attKind === "contracheque") return "contracheque";
-  // Inferência por texto (útil quando o anexo é imagem)
-  if (/(fgts)/.test(t)) return "fgts";
+
+  // Por texto
   if (/(contracheque|holerite|sal[áa]rio)/.test(t)) return "contracheque";
-  if (/(empr[ée]stimo|d[ií]vida|financiamento|consignado|contrato)/.test(t)) return "emprestimo";
+  if (/(empr[ée]stimo|d[ií]vida|financiamento|consignado)/.test(t)) return "emprestimo";
   if (/(fatura|cart[ãa]o)/.test(t)) return "fatura";
-  if (/(extrato|banc[áa]rio|pix|conta corrente|lan[çc]amento banc)/.test(t)) return "extrato";
+  if (/(extrato|banc[áa]rio|pix|conta corrente)/.test(t)) return "extrato";
+
   return null;
 }
 
