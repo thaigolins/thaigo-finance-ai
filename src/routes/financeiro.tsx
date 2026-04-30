@@ -273,7 +273,11 @@ function FinanceiroPage() {
             <div className="divide-y divide-border/60">
               {sortedTxs.map((t, idx) => {
                 const positive = t.kind === "income" || Number(t.amount) > 0;
-                const accountName = accounts.find((a) => a.id === t.bank_account_id)?.bank ?? "Sem conta vinculada";
+                const acc = accounts.find((a) => a.id === t.bank_account_id);
+                const accountName = acc?.bank ?? "Sem conta vinculada";
+                const accBankDef = findBank(acc?.bank);
+                const accColor = acc?.bank_color ?? accBankDef?.color ?? acc?.color ?? "#6B7280";
+                const accLogo = acc?.bank_logo ?? accBankDef?.logo ?? null;
                 const prevKey = idx > 0 ? (sortedTxs[idx - 1].bank_account_id ?? "~none") : null;
                 const currKey = t.bank_account_id ?? "~none";
                 const showHeader = prevKey !== currKey;
@@ -281,7 +285,11 @@ function FinanceiroPage() {
                   <div key={t.id}>
                     {showHeader && (
                       <div className="flex items-center gap-2 pt-4 pb-2 first:pt-0">
-                        <Building2 className="h-3.5 w-3.5 text-primary" />
+                        {acc ? (
+                          <BankLogo name={accountName} logo={accLogo} color={accColor} size={24} />
+                        ) : (
+                          <Building2 className="h-3.5 w-3.5 text-primary" />
+                        )}
                         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                           {accountName}
                         </span>
