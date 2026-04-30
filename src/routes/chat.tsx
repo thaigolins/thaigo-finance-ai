@@ -765,6 +765,19 @@ function ChatPage() {
 
       if (replyContent) {
         await persistMessage(convId, "assistant", replyContent, []);
+
+        // Renomeia a conversa com base no assunto após primeira mensagem
+        const currentConv = conversations.find((c) => c.id === convId);
+        if (currentConv?.title === "Nova conversa" && text.trim().length > 3) {
+          const words = text.trim().split(/\s+/);
+          const shortTitle =
+            words.slice(0, 5).join(" ") + (words.length > 5 ? "..." : "");
+          await supabase
+            .from("ai_conversations")
+            .update({ title: shortTitle })
+            .eq("id", convId);
+          invalidateConvs();
+        }
       }
       await invalidateMessages();
       setTimeout(() => {
