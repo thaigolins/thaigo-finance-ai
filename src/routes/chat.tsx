@@ -717,11 +717,14 @@ function ChatPage() {
               .slice(-20)
               .filter((m) => m.role === "user" || m.role === "assistant")
               .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+            const { data: sessData } = await supabase.auth.getSession();
+            const accessToken = sessData.session?.access_token ?? "";
             console.log("[chat] calling aiChat with:", {
               conversationId: convId,
               userMessage: userText.slice(0, 50),
               historyLength: history.length,
               attachments: attachments.length,
+              hasToken: !!accessToken,
             });
             const result = await aiChat({
               data: {
@@ -734,6 +737,7 @@ function ChatPage() {
                   mime: a.mime,
                   size: a.size,
                 })),
+                token: accessToken,
               },
             });
             console.log("[chat] aiChat result:", result);
