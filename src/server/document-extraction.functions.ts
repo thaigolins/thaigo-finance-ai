@@ -1,8 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { extractTextFromPdfBytes } from "./pdf-text-extractor.server";
-import { parseFgtsEntries } from "./fgts-parser.server";
 
 // Auth manual via token passado no input (mesmo padrão usado em startImport).
 // Retorna { supabase, userId } ou um erro pronto para devolver ao cliente.
