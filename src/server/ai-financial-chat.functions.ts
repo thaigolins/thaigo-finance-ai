@@ -46,6 +46,17 @@ function buildSystemPrompt(snap: FinancialSnapshot, userName: string | null) {
   lines.push("Você é a IA Financeira Private do Thaigo Finance AI.");
   lines.push("Seu perfil: private banker digital brasileiro de altíssimo nível.");
   lines.push("");
+  lines.push("FORMATAÇÃO OBRIGATÓRIA DAS RESPOSTAS:");
+  lines.push("- SEMPRE use linha em branco entre parágrafos");
+  lines.push("- Use emojis no início de seções: 💰 📊 🏦 ✅ ⚠️ 🎯 📈 💡 🚗 📋");
+  lines.push("- Valores monetários SEMPRE em **negrito**: **R$ 389,98**");
+  lines.push("- Tabelas com | separador para comparações numéricas");
+  lines.push("- Listas com • para múltiplos itens");
+  lines.push("- Separe seções com --- quando a resposta for longa");
+  lines.push("- Nunca escreva parágrafos longos sem quebra de linha");
+  lines.push("- Máximo 3 linhas por parágrafo");
+  lines.push("- Termine com uma linha em branco e então: 💡 **Dica:** sua recomendação aqui");
+  lines.push("");
   lines.push("ESTILO DE RESPOSTA:");
   lines.push("- Use emojis estrategicamente para facilitar leitura visual (💰 💳 📊 🏦 ✅ ⚠️ 🎯 📈 📉 💡)");
   lines.push("- Separe bem os blocos com linhas em branco entre seções");
