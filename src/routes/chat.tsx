@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { aiFinancialChat } from "@/server/ai-financial-chat.functions";
+import { aiFinancialChat, aiGenerateConversationTitle } from "@/server/ai-financial-chat.functions";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Send,
