@@ -108,46 +108,36 @@ function ExtratosPage() {
     <>
       <AppHeader title="Extratos" subtitle="Histórico bancário" exportModule="Extratos" />
       <main className="flex-1 space-y-6 p-4 md:p-6">
-        <section className="flex flex-col gap-4 rounded-3xl border border-dashed border-primary/40 bg-primary/5 p-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
-              <Upload className="h-6 w-6" />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold">Importar extrato bancário</h3>
-              <p className="text-sm text-muted-foreground">
-                Suporte a PDF, OFX e CSV — armazenado com criptografia.
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf,.ofx,.csv,image/*"
-              hidden
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
-              }}
-            />
-            <Button
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              {uploading ? (
-                <>
-                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Enviando...
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-1.5 h-4 w-4" /> Importar
-                </>
-              )}
-            </Button>
-          </div>
-        </section>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Upload className="h-3.5 w-3.5" />
+          <span>Importar extrato:</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 rounded-full px-3 text-xs"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <>
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                Enviando...
+              </>
+            ) : (
+              "Selecionar arquivo"
+            )}
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".pdf,.ofx,.csv,image/*"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+            }}
+          />
+        </div>
 
         {bankUploads.length > 0 && (
           <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-card">
