@@ -32,23 +32,24 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-const mainItems = [
+const overviewItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
   { title: "Cartões", url: "/cartoes", icon: CreditCard },
   { title: "Faturas", url: "/faturas", icon: Receipt },
   { title: "Extratos", url: "/extratos", icon: FileText },
   { title: "Recorrentes", url: "/recorrentes", icon: Repeat },
-  { title: "Empréstimos & Dívidas", url: "/dividas", icon: Landmark },
-  { title: "FGTS", url: "/fgts", icon: Banknote },
 ];
+
+const dividasItem = { title: "Empréstimos & Dívidas", url: "/dividas", icon: Landmark };
 
 const planningItems = [
   { title: "Metas", url: "/metas", icon: Target },
   { title: "Investimentos", url: "/investimentos", icon: TrendingUp },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
-  { title: "Configurações", url: "/settings", icon: Settings },
 ];
+
+const fgtsItem = { title: "FGTS", url: "/fgts", icon: Banknote };
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -99,20 +100,6 @@ export function AppSidebar() {
 
       <SidebarContent className="py-2">
         <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Visão Geral</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>{mainItems.map(renderItem)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel>Planejamento</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>{planningItems.map(renderItem)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
           {!collapsed && <SidebarGroupLabel>Inteligência</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
@@ -131,9 +118,36 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel>Visão Geral</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>{overviewItems.map(renderItem)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>{renderItem(dividasItem)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel>Planejamento</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>{planningItems.map(renderItem)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>{renderItem(fgtsItem)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border/60 p-3 space-y-2">
+        <SidebarMenu>{renderItem({ title: "Configurações", url: "/settings", icon: Settings })}</SidebarMenu>
         {!collapsed ? (
           <>
             <div className="flex items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/30 p-2.5">
