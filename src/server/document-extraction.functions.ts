@@ -207,26 +207,37 @@ Regras:
 }
 
 function buildFgtsHeaderMessages(fileBase64: string, mime: string, filename: string) {
-  const sys = `Você é um analista financeiro brasileiro especializado em leitura de documentos.
-Extraia dados ESTRUTURADOS do documento anexo seguindo EXATAMENTE o schema JSON solicitado.
-Regras:
-- Responda SOMENTE com JSON válido (sem markdown, sem cercas \`\`\`).
-- Use ponto como separador decimal. Valores numéricos sem prefixo R$.
-- Datas no formato ISO (YYYY-MM-DD). Se uma data não estiver clara, use null.
-- Não invente dados. Se um campo não existir no documento, use null ou 0.`;
-  const userText = `Documento: ${filename} (${mime})
-Tipo: fgts (somente cabeçalho)
-
-${fgtsHeaderPrompt}
-
-Retorne APENAS o JSON. Nada mais.`;
   return [
-    { role: "system", content: sys },
+    {
+      role: "system",
+      content: "Você é um analista financeiro especializado em extratos FGTS brasileiros. Extraia dados do cabeçalho do documento.",
+    },
     {
       role: "user",
       content: [
-        { type: "text", text: userText },
-        { type: "image_url", image_url: { url: `data:${mime};base64,${fileBase64}` } },
+        {
+          type: "text",
+          text: `Extraia APENAS o cabeçalho deste extrato FGTS (${filename}) e retorne este JSON exato sem markdown:
+{
+  "kind": "fgts",
+  "employer": "nome do empregador",
+  "cnpj": "CNPJ do empregador ou null",
+  "status": "ativa",
+  "balance": número do saldo final (última linha da coluna TOTAL),
+  "monthly_deposit": número do depósito mensal mais recente (linhas 115-DEPOSITO),
+  "jam_month": número do JAM mais recente (linhas CREDITO DE JAM),
+  "last_movement": "YYYY-MM-DD da data do último lançamento"
+}
+IMPORTANTE:
+- balance = valor da última linha da coluna TOTAL do extrato
+- monthly_deposit = valor da linha 115-DEPOSITO mais recente
+- jam_month = valor da linha CREDITO DE JAM mais recente (ex: se aparecer "R$ 350,57" use 350.57)
+- Nunca retorne 0 para jam_month se houver linhas CREDITO DE JAM no documento`,
+        },
+        {
+          type: "image_url",
+          image_url: { url: `data:${mime};base64,${fileBase64}` },
+        },
       ],
     },
   ];
