@@ -737,46 +737,46 @@ function ChatPage() {
             ? "Private (executivo, com capa, índice e insights)"
             : "Simples (operacional, direto ao ponto)";
         replyContent = `Perfeito. Estou gerando seu **PDF ${exportReq.kind === "private" ? "Private" : "Simples"}** do módulo **${exportReq.module}** para **${exportReq.period}**${exportReq.filters.length ? ` com filtros: ${exportReq.filters.join(", ")}` : ""}.\n\nFormato: ${tipo}.\n\nO download começará em instantes.`;
-      } else if (text && !anyExtracted) {
-        // Só chama a IA conversacional se houve texto E não houve extração
-        try {
-          const history = messages
-            .slice(-20)
-            .filter((m) => m.role === "user" || m.role === "assistant")
-            .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
-          console.log("[chat] calling aiChat with:", {
-            conversationId: convId,
-            userMessage: userText.slice(0, 50),
-            historyLength: history.length,
-            attachments: attachments.length,
-          });
-          const result = await aiChat({
-            data: {
+      } else {
+        // Só chama a IA conversacional se:
+        // 1. Há texto
+        // 2. Não houve extração neste turno
+        // 3. Não é uma exportação de PDF (já tratado acima)
+        const shouldCallAI = text.trim().length > 0 && !anyExtracted;
+
+        if (shouldCallAI) {
+          try {
+            const history = messages
+              .slice(-20)
+              .filter((m) => m.role === "user" || m.role === "assistant")
+              .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+            console.log("[chat] calling aiChat with:", {
               conversationId: convId,
-              userMessage: userText,
-              history,
-              attachments: attachments.map((a) => ({
-                filename: a.filename,
-                kind: a.kind,
-                mime: a.mime,
-                size: a.size,
-              })),
-            },
-          });
-          console.log("[chat] aiChat result:", result);
-          replyContent = result?.reply ?? "";
-          if (!replyContent) {
-            console.warn("[chat] aiChat returned empty reply", result);
-            replyContent = smartReply(text, attachments);
+              userMessage: userText.slice(0, 50),
+              historyLength: history.length,
+              attachments: attachments.length,
+            });
+            const result = await aiChat({
+              data: {
+                conversationId: convId,
+                userMessage: userText,
+                history,
+                attachments: attachments.map((a) => ({
+                  filename: a.filename,
+                  kind: a.kind,
+                  mime: a.mime,
+                  size: a.size,
+                })),
+              },
+            });
+            console.log("[chat] aiChat result:", result);
+            replyContent = result?.reply ?? "Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.";
+          } catch (err) {
+            console.error("[chat] aiChat error:", err);
+            toast.error(err instanceof Error ? err.message : "Falha ao consultar IA");
+            replyContent = "Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.";
           }
-        } catch (err) {
-          console.error("[chat] aiChat error:", err);
-          toast.error(err instanceof Error ? err.message : "Falha ao consultar IA");
-          replyContent = smartReply(text, attachments);
         }
-      } else if (!anyExtracted && attachments.length > 0) {
-        // Anexou imagem sem texto: dá um aviso amigável
-        replyContent = smartReply(text, attachments);
       }
 
       if (replyContent) {
