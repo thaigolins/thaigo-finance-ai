@@ -9,7 +9,6 @@ import {
   Shield,
   TrendingUp,
   CalendarClock,
-  FileText,
   Trash2,
   Loader2,
   Download,
