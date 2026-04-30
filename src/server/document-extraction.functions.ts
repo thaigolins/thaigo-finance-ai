@@ -618,15 +618,52 @@ export const confirmPendingAction = createServerFn({ method: "POST" })
         const accId = (account as { id: string }).id;
 
         const entries = (p.entries as Record<string, unknown>[] | undefined) ?? [];
+        console.log("[confirmFGTS] entries count", entries.length);
+
         if (entries.length > 0) {
-          const validTypes = new Set(["deposito", "jam", "saque", "outro"]);
+          const typeMap: Record<string, string> = {
+            "deposito": "deposito",
+            "115-deposito": "deposito",
+            "deposito mensal": "deposito",
+            "credito de jam": "jam",
+            "ac cred": "jam",
+            "ac aut": "jam",
+            "regularizacao": "jam",
+            "jam": "jam",
+            "rendimento": "jam",
+            "saque dep": "saque",
+            "saque jam": "saque",
+            "saque": "saque",
+            "ajuste": "outro",
+            "outro": "outro",
+          };
+
+          function mapEntryType(raw: string): string {
+            const lower = (raw ?? "").toLowerCase().trim();
+            for (const [key, val] of Object.entries(typeMap)) {
+              if (lower.includes(key)) return val;
+            }
+            return "outro";
+          }
+
           const rows = entries.slice(0, 500).map((e) => ({
-            user_id: userId, fgts_account_id: accId,
+            user_id: userId,
+            fgts_account_id: accId,
             occurred_at: str(e.occurred_at) || new Date().toISOString().slice(0, 10),
-            entry_type: validTypes.has(str(e.entry_type)) ? str(e.entry_type) : "outro",
-            amount: num(e.amount), notes: str(e.notes) || null,
+            entry_type: mapEntryType(str(e.entry_type)),
+            amount: Math.abs(num(e.amount)),
+            notes: str(e.notes) || str(e.description) || str(e.entry_type) || null,
           }));
-          await supabase.from("fgts_entries").insert(rows);
+
+          const { error: entriesError } = await supabase
+            .from("fgts_entries")
+            .insert(rows);
+
+          if (entriesError) {
+            console.error("[confirmFGTS] entries insert error", entriesError);
+          } else {
+            console.log("[confirmFGTS] entries inserted", rows.length);
+          }
         }
         createdSummary = `Conta FGTS de ${str(p.employer)} criada.`;
       } else if (kind === "emprestimo") {

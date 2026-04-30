@@ -38,7 +38,7 @@ import {
 import { z } from "zod";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
-import { StatCard } from "@/components/stat-card";
+
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -371,44 +371,54 @@ function FgtsPage() {
   return (
     <>
       <AppHeader title="FGTS" subtitle="Saldo, contas e evolução por empregador" exportModule="FGTS" />
-      <main className="flex-1 space-y-8 p-4 md:p-8">
-        {/* 6 Cards de estatísticas */}
-        <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <StatCard label="Saldo Total FGTS" value={formatBRL(total)} icon={Banknote} accent="primary" />
-          <StatCard
+      <main className="flex-1 space-y-6 p-4 md:p-8">
+        {/* SEÇÃO 1 — Header com 3 cards principais */}
+        <section className="grid gap-5 md:grid-cols-3">
+          <HeroCard
+            label="Saldo Total FGTS"
+            value={formatBRL(total)}
+            icon={Banknote}
+            tone="success"
+            big
+          />
+          <HeroCard
             label="Depósito Mensal"
             value={formatBRL(monthlyDeposit)}
             icon={TrendingUp}
-            accent="success"
+            tone="primary"
           />
-          <StatCard
-            label="JAM Acumulado (mês)"
+          <HeroCard
+            label="JAM Mês"
             value={formatBRL(totalJamMonth)}
             icon={Sparkles}
-            accent="warning"
-          />
-          <StatCard
-            label="Total em Saques"
-            value={formatBRL(totals.saq)}
-            icon={ArrowUpRight}
-            accent="destructive"
-          />
-          <StatCard
-            label="Valor Rescisório"
-            value={formatBRL(valorRescisorio)}
-            icon={Shield}
-            accent="primary"
-          />
-          <StatCard
-            label="Última Atualização"
-            value={lastMovementGlobal ? formatDatePT(lastMovementGlobal) : "—"}
-            icon={CalendarClock}
-            accent="muted"
+            tone="warning"
           />
         </section>
 
-        {/* Upload + Cadastro */}
-        <section className="grid gap-6 lg:grid-cols-3">
+        {/* SEÇÃO 2 — 3 cards secundários */}
+        <section className="grid gap-4 sm:grid-cols-3">
+          <MiniCard
+            label="Total em Saques"
+            value={formatBRL(totals.saq)}
+            icon={ArrowUpRight}
+            tone="destructive"
+          />
+          <MiniCard
+            label="Valor Rescisório (est.)"
+            value={formatBRL(valorRescisorio)}
+            icon={Shield}
+            tone="primary"
+          />
+          <MiniCard
+            label="Atualizado em"
+            value={lastMovementGlobal ? formatDatePT(lastMovementGlobal) : "—"}
+            icon={CalendarClock}
+            tone="muted"
+          />
+        </section>
+
+        {/* SEÇÃO 3 — Upload + Cadastro */}
+        <section className="grid gap-5 lg:grid-cols-3">
           <div
             onDragOver={(e) => {
               e.preventDefault();
@@ -421,7 +431,7 @@ function FgtsPage() {
               handleFiles(e.dataTransfer.files);
             }}
             className={cn(
-              "lg:col-span-2 rounded-2xl border border-dashed p-8 transition-all",
+              "lg:col-span-2 rounded-2xl border border-dashed p-6 transition-all",
               dragOver ? "border-primary/60 bg-emerald-soft" : "border-border/50 bg-card",
             )}
           >
@@ -463,25 +473,19 @@ function FgtsPage() {
                   >
                     <Shield className="mr-1 h-3 w-3" /> Criptografado
                   </Badge>
-                  <Badge
-                    variant="outline"
-                    className="rounded-full border-primary/30 bg-emerald-soft text-[10px] uppercase tracking-wider text-primary"
-                  >
-                    <Sparkles className="mr-1 h-3 w-3" /> Bucket privado
-                  </Badge>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border/40 bg-card p-6 shadow-card">
-            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="rounded-2xl border border-border/40 bg-card p-5 shadow-card">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Cadastro Manual
             </p>
-            <p className="mt-3 text-sm text-foreground/90">
-              Adicione manualmente uma conta FGTS por empregador, status e saldo.
+            <p className="mt-2 text-sm text-foreground/90">
+              Adicione uma conta FGTS por empregador.
             </p>
-            <div className="mt-5">{newDialog}</div>
+            <div className="mt-4">{newDialog}</div>
           </div>
         </section>
 
@@ -497,12 +501,201 @@ function FgtsPage() {
           />
         ) : (
           <>
-            {/* Gráfico melhorado */}
-            <section className="rounded-2xl border border-border/40 bg-card p-6 shadow-card">
+            {/* SEÇÃO 4 — Cards do empregador (layout horizontal limpo) */}
+            <section className="space-y-4">
+              <div>
+                <h2 className="text-base font-semibold tracking-tight">Contas por empregador</h2>
+                <p className="text-xs text-muted-foreground">
+                  {accounts.length} vínculo{accounts.length === 1 ? "" : "s"}
+                </p>
+              </div>
+              <div className="space-y-4">
+                {accounts.map((a) => {
+                  const accountEntries = entries.filter((e) => e.fgts_account_id === a.id);
+                  const accountWithdrawals = accountEntries
+                    .filter((e) => e.entry_type === "saque")
+                    .reduce((s, e) => s + Number(e.amount), 0);
+                  const admission = accountEntries[0]?.occurred_at ?? a.created_at ?? null;
+                  const tempo = diffYearsMonths(admission);
+                  const accountRescisorio = Number(a.balance) * 1.4;
+                  const progress = (Number(a.balance) / maxAccountBalance) * 100;
+                  return (
+                    <div
+                      key={a.id}
+                      className="rounded-2xl border border-border/40 bg-card p-5 shadow-card"
+                    >
+                      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_auto] lg:items-center">
+                        {/* Esquerda: empregador */}
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-muted/20 text-muted-foreground">
+                            <Building2 className="h-5 w-5" strokeWidth={1.75} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold tracking-tight">
+                              {a.employer}
+                            </p>
+                            {a.cnpj && (
+                              <p className="num text-[11px] text-muted-foreground truncate">
+                                CNPJ {a.cnpj}
+                              </p>
+                            )}
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "mt-1 rounded-full px-2 py-0 text-[9px] uppercase tracking-wider",
+                                a.status === "ativa"
+                                  ? "border-success/30 bg-success/10 text-success"
+                                  : "border-border/40 bg-muted/20 text-muted-foreground",
+                              )}
+                            >
+                              {a.status}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {/* Centro: saldo + barra */}
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            Saldo
+                          </p>
+                          <p className="num mt-1 text-2xl font-bold tracking-tight">
+                            {formatBRL(Number(a.balance))}
+                          </p>
+                          <Progress value={progress} className="mt-2 h-1.5" />
+                        </div>
+
+                        {/* Direita: grid 2x2 */}
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Depósito
+                            </p>
+                            <p className="num mt-0.5 font-medium text-success">
+                              {formatBRL(Number(a.monthly_deposit))}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              JAM
+                            </p>
+                            <p className="num mt-0.5 font-medium text-warning">
+                              {formatBRL(Number(a.jam_month))}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Saques
+                            </p>
+                            <p className="num mt-0.5 font-medium text-destructive">
+                              {formatBRL(accountWithdrawals)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Rescisório
+                            </p>
+                            <p className="num mt-0.5 font-medium text-primary">
+                              {formatBRL(accountRescisorio)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Ações */}
+                        <div className="flex items-center justify-end gap-1">
+                          {a.statement_path && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground"
+                              onClick={() => downloadStatement(a.statement_path!)}
+                              title="Abrir extrato"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => remove.mutate(a.id)}
+                            title="Remover"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Rodapé */}
+                      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border/40 pt-3 text-[11px] text-muted-foreground">
+                        <span className="flex items-center gap-1.5">
+                          <CalendarClock className="h-3 w-3" />
+                          {a.last_movement
+                            ? `Atualizado em ${formatDatePT(a.last_movement)}`
+                            : "Sem movimentação registrada"}
+                        </span>
+                        {tempo && (
+                          <span className="flex items-center gap-1.5">
+                            <Calendar className="h-3 w-3" />
+                            Desde {formatDatePT(admission)} · {tempo}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* SEÇÃO 5 — Análise Financeira */}
+            <section className="rounded-2xl border border-border/40 bg-card p-5 shadow-card">
+              <div className="mb-4 flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-primary" />
+                <h2 className="text-base font-semibold tracking-tight">Análise Financeira</h2>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <AnalysisItem
+                  icon={Calendar}
+                  label="Tempo de contribuição"
+                  value={tempoContribuicao ?? "—"}
+                />
+                <AnalysisItem
+                  icon={TrendingUp}
+                  label="Média de depósito"
+                  value={formatBRL(mediaDeposito)}
+                />
+                <AnalysisItem
+                  icon={ArrowDownLeft}
+                  label="Total depositado"
+                  value={formatBRL(totals.dep)}
+                  accent="text-success"
+                />
+                <AnalysisItem
+                  icon={Sparkles}
+                  label="Total de JAM"
+                  value={formatBRL(totals.jam)}
+                  accent="text-warning"
+                />
+                <AnalysisItem
+                  icon={ArrowUpRight}
+                  label="Total sacado"
+                  value={formatBRL(totals.saq)}
+                  accent="text-destructive"
+                />
+                <AnalysisItem
+                  icon={PiggyBank}
+                  label="Projeção 12 meses ↑"
+                  value={formatBRL(projecao12m)}
+                  accent="text-primary"
+                />
+              </div>
+            </section>
+
+            {/* SEÇÃO 6 — Gráfico de evolução */}
+            <section className="rounded-2xl border border-border/40 bg-card p-5 shadow-card">
               <div className="mb-5 flex items-end justify-between">
                 <div>
                   <h2 className="text-base font-semibold tracking-tight">
-                    Evolução do saldo consolidado
+                    Evolução do saldo (últimos 12 meses)
                   </h2>
                   <p className="text-xs text-muted-foreground">
                     Saldo acumulado, depósitos mensais e marcadores de saque
@@ -589,195 +782,8 @@ function FgtsPage() {
               )}
             </section>
 
-            {/* Análise FGTS */}
-            <section className="rounded-2xl border border-border/40 bg-card p-6 shadow-card">
-              <div className="mb-5 flex items-center gap-2">
-                <BarChart3 className="h-4 w-4 text-primary" />
-                <h2 className="text-base font-semibold tracking-tight">Análise do FGTS</h2>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <AnalysisItem
-                  icon={Calendar}
-                  label="Tempo de contribuição"
-                  value={tempoContribuicao ?? "—"}
-                />
-                <AnalysisItem
-                  icon={TrendingUp}
-                  label="Média de depósito mensal"
-                  value={formatBRL(mediaDeposito)}
-                />
-                <AnalysisItem
-                  icon={ArrowDownLeft}
-                  label="Total depositado pelo empregador"
-                  value={formatBRL(totals.dep)}
-                  accent="text-success"
-                />
-                <AnalysisItem
-                  icon={Sparkles}
-                  label="Total de JAM recebido"
-                  value={formatBRL(totals.jam)}
-                  accent="text-warning"
-                />
-                <AnalysisItem
-                  icon={ArrowUpRight}
-                  label="Total sacado"
-                  value={formatBRL(totals.saq)}
-                  accent="text-destructive"
-                />
-                <AnalysisItem
-                  icon={PiggyBank}
-                  label="Projeção em 12 meses"
-                  value={formatBRL(projecao12m)}
-                  accent="text-primary"
-                />
-              </div>
-            </section>
-
-            {/* Contas por empregador */}
-            <section>
-              <div className="mb-4">
-                <h2 className="text-base font-semibold tracking-tight">Contas por empregador</h2>
-                <p className="text-xs text-muted-foreground">
-                  {accounts.length} vínculo{accounts.length === 1 ? "" : "s"} ·{" "}
-                  {formatBRL(totals.saq)} em saques registrados
-                </p>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {accounts.map((a) => {
-                  const accountEntries = entries.filter((e) => e.fgts_account_id === a.id);
-                  const accountWithdrawals = accountEntries
-                    .filter((e) => e.entry_type === "saque")
-                    .reduce((s, e) => s + Number(e.amount), 0);
-                  const admission =
-                    accountEntries[0]?.occurred_at ?? a.created_at ?? null;
-                  const tempo = diffYearsMonths(admission);
-                  const accountRescisorio = Number(a.balance) * 1.4;
-                  const progress = (Number(a.balance) / maxAccountBalance) * 100;
-                  return (
-                    <div
-                      key={a.id}
-                      className="rounded-2xl border border-border/40 bg-card p-5 shadow-card"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/50 bg-muted/20 text-muted-foreground">
-                            <Building2 className="h-4 w-4" strokeWidth={1.75} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold tracking-tight">
-                              {a.employer}
-                            </p>
-                            {a.cnpj && (
-                              <p className="num text-[11px] text-muted-foreground">CNPJ {a.cnpj}</p>
-                            )}
-                          </div>
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "shrink-0 rounded-full px-2 py-0 text-[9px] uppercase tracking-wider",
-                            a.status === "ativa"
-                              ? "border-success/30 bg-success/10 text-success"
-                              : "border-border/40 bg-muted/20 text-muted-foreground",
-                          )}
-                        >
-                          {a.status}
-                        </Badge>
-                      </div>
-
-                      <div className="mt-5">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                          Saldo
-                        </p>
-                        <p className="num mt-1 text-2xl font-semibold tracking-tight">
-                          {formatBRL(Number(a.balance))}
-                        </p>
-                        <Progress value={progress} className="mt-2 h-1.5" />
-                      </div>
-
-                      <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-4 text-xs">
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Depósito mensal
-                          </p>
-                          <p className="num mt-0.5 font-medium">
-                            {formatBRL(Number(a.monthly_deposit))}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            JAM mês
-                          </p>
-                          <p className="num mt-0.5 font-medium text-warning">
-                            {formatBRL(Number(a.jam_month))}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Saques
-                          </p>
-                          <p className="num mt-0.5 font-medium text-destructive">
-                            {formatBRL(accountWithdrawals)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Rescisório (est.)
-                          </p>
-                          <p className="num mt-0.5 font-medium text-primary">
-                            {formatBRL(accountRescisorio)}
-                          </p>
-                        </div>
-                      </div>
-
-                      {tempo && (
-                        <div className="mt-3 flex items-center gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2 text-[11px] text-muted-foreground">
-                          <Calendar className="h-3.5 w-3.5" />
-                          <span>
-                            Desde {formatDatePT(admission)} · {tempo}
-                          </span>
-                        </div>
-                      )}
-
-                      <div className="mt-2 flex items-center gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2 text-[11px] text-muted-foreground">
-                        <CalendarClock className="h-3.5 w-3.5" />
-                        <span>
-                          {a.last_movement
-                            ? `Atualizado em ${formatDatePT(a.last_movement)}`
-                            : "Sem movimentação registrada"}
-                        </span>
-                      </div>
-
-                      <div className="mt-3 flex items-center justify-end gap-1">
-                        {a.statement_path && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground"
-                            onClick={() => downloadStatement(a.statement_path!)}
-                            title="Abrir extrato"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => remove.mutate(a.id)}
-                          title="Remover"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* Histórico de lançamentos */}
-            <section className="rounded-2xl border border-border/40 bg-card p-6 shadow-card">
+            {/* SEÇÃO 7 — Histórico de lançamentos */}
+            <section className="rounded-2xl border border-border/40 bg-card p-5 shadow-card">
               <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h2 className="text-base font-semibold tracking-tight">
@@ -845,9 +851,6 @@ function FgtsPage() {
                     const meta = entryMeta[e.entry_type];
                     const Icon = meta.icon;
                     const v = Number(e.amount);
-                    // Tenta extrair saldo de notes (formato livre: "saldo: R$ X")
-                    const saldoMatch = e.notes?.match(/saldo[:\s]+r?\$?\s*([\d.,]+)/i);
-                    const saldoApos = saldoMatch ? saldoMatch[1] : null;
                     return (
                       <li key={e.id} className="flex items-center gap-4 py-3">
                         <div
@@ -875,7 +878,6 @@ function FgtsPage() {
                           </div>
                           <p className="num mt-0.5 text-[11px] text-muted-foreground">
                             {formatDatePT(e.occurred_at)}
-                            {saldoApos && ` · saldo após R$ ${saldoApos}`}
                           </p>
                         </div>
                         <p
@@ -925,6 +927,99 @@ function FgtsPage() {
         )}
       </main>
     </>
+  );
+}
+
+type Tone = "primary" | "success" | "warning" | "destructive" | "muted";
+
+const toneStyles: Record<Tone, { icon: string; iconBg: string; value: string }> = {
+  primary: {
+    icon: "text-primary",
+    iconBg: "border-primary/30 bg-emerald-soft",
+    value: "text-foreground",
+  },
+  success: {
+    icon: "text-success",
+    iconBg: "border-success/30 bg-success/10",
+    value: "text-success",
+  },
+  warning: {
+    icon: "text-warning",
+    iconBg: "border-warning/30 bg-warning/10",
+    value: "text-warning",
+  },
+  destructive: {
+    icon: "text-destructive",
+    iconBg: "border-destructive/30 bg-destructive/10",
+    value: "text-destructive",
+  },
+  muted: {
+    icon: "text-muted-foreground",
+    iconBg: "border-border/40 bg-muted/20",
+    value: "text-foreground",
+  },
+};
+
+function HeroCard({
+  label,
+  value,
+  icon: Icon,
+  tone,
+  big,
+}: {
+  label: string;
+  value: string;
+  icon: typeof Circle;
+  tone: Tone;
+  big?: boolean;
+}) {
+  const s = toneStyles[tone];
+  return (
+    <div className="rounded-2xl border border-border/40 bg-card p-5 shadow-card">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+        <div
+          className={cn(
+            "flex h-9 w-9 items-center justify-center rounded-xl border",
+            s.iconBg,
+          )}
+        >
+          <Icon className={cn("h-4 w-4", s.icon)} strokeWidth={1.75} />
+        </div>
+      </div>
+      <p
+        className={cn(
+          "num mt-3 font-bold tracking-tight tabular-nums",
+          big ? "text-3xl" : "text-2xl",
+          s.value,
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function MiniCard({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  icon: typeof Circle;
+  tone: Tone;
+}) {
+  const s = toneStyles[tone];
+  return (
+    <div className="rounded-2xl border border-border/40 bg-card p-4 shadow-card">
+      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <Icon className={cn("h-3.5 w-3.5", s.icon)} />
+        {label}
+      </div>
+      <p className={cn("num mt-2 text-xl font-semibold tabular-nums", s.value)}>{value}</p>
+    </div>
   );
 }
 
