@@ -949,7 +949,48 @@ function ChatPage() {
                       )}
                     >
                       <div className="prose prose-sm prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-strong:text-foreground prose-p:my-1.5">
-                        <ReactMarkdown>{m.content}</ReactMarkdown>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            table: ({ node, ...props }) => (
+                              <div className="overflow-x-auto my-3">
+                                <table className="min-w-full text-xs border-collapse" {...props} />
+                              </div>
+                            ),
+                            thead: ({ node, ...props }) => (
+                              <thead className="bg-muted/40 border-b border-border/60" {...props} />
+                            ),
+                            th: ({ node, ...props }) => (
+                              <th className="px-3 py-2 text-left font-semibold text-muted-foreground" {...props} />
+                            ),
+                            td: ({ node, ...props }) => (
+                              <td className="px-3 py-2 border-b border-border/40" {...props} />
+                            ),
+                            p: ({ node, ...props }) => (
+                              <p className="mb-3 leading-relaxed" {...props} />
+                            ),
+                            ul: ({ node, ...props }) => (
+                              <ul className="mb-3 space-y-1 list-none pl-0" {...props} />
+                            ),
+                            li: ({ node, ...props }) => (
+                              <li className="flex gap-2 items-start" {...props} />
+                            ),
+                            h2: ({ node, ...props }) => (
+                              <h2 className="text-base font-bold mt-4 mb-2 text-foreground" {...props} />
+                            ),
+                            h3: ({ node, ...props }) => (
+                              <h3 className="text-sm font-semibold mt-3 mb-1.5 text-foreground" {...props} />
+                            ),
+                            strong: ({ node, ...props }) => (
+                              <strong className="font-semibold text-foreground" {...props} />
+                            ),
+                            hr: ({ node, ...props }) => (
+                              <hr className="my-3 border-border/40" {...props} />
+                            ),
+                          }}
+                        >
+                          {m.content}
+                        </ReactMarkdown>
                       </div>
                       {atts.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
