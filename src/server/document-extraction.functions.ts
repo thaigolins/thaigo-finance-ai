@@ -415,97 +415,81 @@ export const extractDocument = createServerFn({ method: "POST" })
     let payload: Record<string, unknown>;
 
     if (data.kind === "fgts") {
-      // FGTS em 2 etapas: cabeçalho + entries (sem response_format para não cortar JSON longo)
+      // Etapa 1: cabeçalho via Gemini Flash
       const headerMessages = buildFgtsHeaderMessages(base64, data.mime, data.filename);
-      const headerRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: headerMessages,
-          temperature: 0.1,
-          max_tokens: 2000,
-        }),
-      });
-      if (!headerRes.ok) {
-        const status = headerRes.status;
-        let detail = "";
-        try { detail = await headerRes.text(); } catch { /* ignore */ }
-        console.error("FGTS header gateway error", status, detail);
-        if (status === 429) return { ok: false as const, error: "Limite de uso atingido. Aguarde e tente novamente." };
-        if (status === 402) return { ok: false as const, error: "Créditos do gateway de IA esgotados." };
-        return { ok: false as const, error: `Gateway respondeu ${status}.` };
-      }
-      const headerJson = (await headerRes.json()) as { choices?: { message?: { content?: string } }[] };
-      const headerContent = headerJson.choices?.[0]?.message?.content ?? "";
-      const headerParsed = (safeParseJson(headerContent) as Record<string, unknown> | null) ?? {};
-
-      const entriesMessages = buildEntriesMessages(base64, data.mime, data.filename);
-      const entriesRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
-          messages: entriesMessages,
-          temperature: 0.1,
-          max_tokens: 16000,
-        }),
-      });
-      if (!entriesRes.ok) {
-        const status = entriesRes.status;
-        let detail = "";
-        try { detail = await entriesRes.text(); } catch { /* ignore */ }
-        console.error("FGTS entries gateway error", status, detail);
-        if (status === 429) return { ok: false as const, error: "Limite de uso atingido. Aguarde e tente novamente." };
-        if (status === 402) return { ok: false as const, error: "Créditos do gateway de IA esgotados." };
-        return { ok: false as const, error: `Gateway respondeu ${status}.` };
-      }
-      const entriesJson = (await entriesRes.json()) as { choices?: { message?: { content?: string } }[] };
-      const entriesContent = entriesJson.choices?.[0]?.message?.content ?? "";
-      const entriesParsed = (safeParseJson(entriesContent) as Record<string, unknown> | null) ?? {};
-
-      let entriesArr = Array.isArray((entriesParsed as { entries?: unknown }).entries)
-        ? ((entriesParsed as { entries: unknown[] }).entries)
-        : [];
-      console.log("[extractDocument] FGTS 2-step: header keys", Object.keys(headerParsed).length, "entries", entriesArr.length);
-
-      // Fallback: se Gemini não retornou entries, tenta parse determinístico via OCR de texto
-      if (entriesArr.length === 0 && data.mime === "application/pdf") {
-        console.log("[extractDocument] FGTS: Gemini retornou 0 entries, tentando parse de texto do PDF");
-        const ocrMessages = [
-          { role: "system", content: "Você é um OCR. Transcreva TODO o texto do PDF linha por linha, preservando a estrutura da tabela com datas, descrições e valores." },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: "Transcreva todo o texto deste PDF preservando cada linha da tabela com: DATA | LANÇAMENTO | VALOR | TOTAL. Uma linha por lançamento." },
-              { type: "image_url", image_url: { url: `data:${data.mime};base64,${base64}` } },
-            ],
-          },
-        ];
-        const ocrRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      let headerParsed: Record<string, unknown> = {};
+      try {
+        const headerRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "google/gemini-2.5-pro", messages: ocrMessages, temperature: 0, max_tokens: 16000 }),
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: headerMessages,
+            temperature: 0.1,
+            max_tokens: 1000,
+          }),
         });
-        if (ocrRes.ok) {
-          const ocrJson = (await ocrRes.json()) as { choices?: { message?: { content?: string } }[] };
-          const ocrText = ocrJson.choices?.[0]?.message?.content ?? "";
-          console.log("[extractDocument] FGTS OCR text length:", ocrText.length, "preview:", ocrText.slice(0, 300));
-          const parsed = parseFgtsPdfText(ocrText);
-          console.log("[extractDocument] FGTS deterministic parse:", parsed.length, "entries");
-          if (parsed.length > 0) {
-            entriesArr = parsed;
-          }
+        if (headerRes.ok) {
+          const hj = (await headerRes.json()) as { choices?: { message?: { content?: string } }[] };
+          const hc = hj.choices?.[0]?.message?.content ?? "";
+          headerParsed = (safeParseJson(hc) as Record<string, unknown> | null) ?? {};
+          console.log("[extractDocument] FGTS header:", JSON.stringify(headerParsed).slice(0, 200));
         } else {
-          console.error("[extractDocument] FGTS OCR fallback gateway error", ocrRes.status);
+          console.error("[extractDocument] FGTS header gateway error", headerRes.status);
+        }
+      } catch (e) {
+        console.error("[extractDocument] FGTS header error:", e);
+      }
+
+      // Etapa 2: entries via PDF text + parser determinístico
+      let fgtsEntries: unknown[] = [];
+
+      if (data.mime === "application/pdf") {
+        try {
+          const { extractTextFromPdfBytes } = await import("./pdf-text-extractor.server");
+          const { parseFgtsEntries } = await import("./fgts-parser.server");
+          const pdfText = await extractTextFromPdfBytes(bytes);
+          console.log("[extractDocument] FGTS PDF text length:", pdfText.length, "preview:", pdfText.slice(0, 300));
+          if (pdfText.length > 50) {
+            const parsed = parseFgtsEntries(pdfText);
+            fgtsEntries = parsed;
+          }
+        } catch (e) {
+          console.error("[extractDocument] FGTS PDF parse error:", e);
         }
       }
 
-      payload = {
-        ...headerParsed,
-        kind: "fgts",
-        entries: entriesArr,
-      };
+      // Etapa 3: fallback Gemini OCR se ainda sem entries
+      if (fgtsEntries.length === 0) {
+        console.log("[extractDocument] FGTS: Gemini OCR fallback para entries");
+        try {
+          const entriesMessages = buildEntriesMessages(base64, data.mime, data.filename);
+          const entriesRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-pro",
+              messages: entriesMessages,
+              temperature: 0.1,
+              max_tokens: 16000,
+            }),
+          });
+          if (entriesRes.ok) {
+            const ej = (await entriesRes.json()) as { choices?: { message?: { content?: string } }[] };
+            const ec = ej.choices?.[0]?.message?.content ?? "";
+            const ep = (safeParseJson(ec) as Record<string, unknown> | null) ?? {};
+            const arr = (ep as { entries?: unknown }).entries;
+            fgtsEntries = Array.isArray(arr) ? (arr as unknown[]) : [];
+          } else {
+            console.error("[extractDocument] FGTS Gemini entries gateway error", entriesRes.status);
+          }
+        } catch (e) {
+          console.error("[extractDocument] FGTS Gemini entries error:", e);
+        }
+      }
+
+      console.log("[extractDocument] FGTS FINAL entries:", fgtsEntries.length);
+      payload = { ...headerParsed, kind: "fgts", entries: fgtsEntries };
     } else {
       const messages = buildExtractionMessages(data.kind, base64, data.mime, data.filename);
       const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
