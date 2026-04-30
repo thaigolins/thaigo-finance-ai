@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { FormDialog } from "@/components/form-dialog";
+import { FormDialog, type FieldDef } from "@/components/form-dialog";
 import {
   Select,
   SelectContent,
