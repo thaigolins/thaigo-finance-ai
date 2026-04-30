@@ -398,15 +398,30 @@ function AccountsSection() {
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Saldo</p>
               </div>
               <div className="flex items-center gap-1">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8"
-                  onClick={() => setEditing(acc)}
-                  aria-label="Editar"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
+                <FormDialog<AccountForm>
+                  trigger={
+                    <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Editar">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  }
+                  title={`Editar ${acc.bank}`}
+                  schema={accountSchema}
+                  fields={fields}
+                  defaultValues={{
+                    bank: acc.bank,
+                    account_type: acc.account_type,
+                    branch: acc.branch ?? "",
+                    account_number: acc.account_number ?? "",
+                    balance: Number(acc.balance),
+                    color: acc.color ?? "",
+                  }}
+                  onSubmit={async (values) => {
+                    await updateAccount.mutateAsync({
+                      id: acc.id,
+                      values: values as Record<string, unknown>,
+                    });
+                  }}
+                />
                 <Button
                   size="icon"
                   variant="ghost"
@@ -424,35 +439,6 @@ function AccountsSection() {
             </li>
           ))}
         </ul>
-      )}
-
-      {/* Edit dialog */}
-      {editing && (
-        <FormDialog<AccountForm>
-          open={!!editing}
-          onOpenChange={(o) => {
-            if (!o) setEditing(null);
-          }}
-          title={`Editar ${editing.bank}`}
-          schema={accountSchema}
-          fields={fields}
-          defaultValues={{
-            bank: editing.bank,
-            account_type: editing.account_type,
-            branch: editing.branch ?? "",
-            account_number: editing.account_number ?? "",
-            balance: Number(editing.balance),
-            color: editing.color ?? "",
-          }}
-          onSubmit={async (values) => {
-            await updateAccount.mutateAsync({
-              id: editing.id,
-              values: values as Record<string, unknown>,
-            });
-            toast.success("Conta atualizada");
-            setEditing(null);
-          }}
-        />
       )}
     </section>
   );
