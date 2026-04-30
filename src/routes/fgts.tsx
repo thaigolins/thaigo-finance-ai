@@ -145,6 +145,33 @@ type Form = z.infer<typeof schema>;
 
 const PAGE_SIZE = 20;
 
+const FGTS_CODES: Record<string, string> = {
+  "01": "Rescisão sem justa causa / contrato encerrado",
+  "02": "Rescisão por culpa recíproca ou força maior",
+  "03": "Extinção da empresa / estabelecimento",
+  "04": "Aposentadoria",
+  "05": "Falecimento do trabalhador",
+  "06": "Pagamento de parte das prestações do SFH",
+  "07": "Liquidação ou amortização de saldo devedor do SFH",
+  "08": "Conta inativa há mais de 3 anos (antes 05/10/1988)",
+  "09": "Suspensão do trabalho avulso",
+  "10": "Conta inativa há mais de 3 anos",
+  "19E": "Saque-aniversário — depósito principal",
+  "50E": "Saque emergencial COVID-19",
+  "50": "Saque emergencial COVID-19",
+  "60": "Saque-aniversário — depósito disponível",
+  "60F": "Saque-aniversário — depósito com data futura de liberação",
+  "99": "Movimentação não especificada / operação interna da Caixa",
+};
+
+function getFgtsCodeMeaning(notes: string): string | null {
+  if (!notes) return null;
+  const match = notes.match(/COD\s+(\d+[A-Z]?)/i);
+  if (!match) return null;
+  const code = match[1].toUpperCase();
+  return FGTS_CODES[code] ?? null;
+}
+
 function FgtsPage() {
   const { user } = useAuth();
   const [dragOver, setDragOver] = useState(false);
