@@ -174,12 +174,40 @@ function smartReply(text: string, attachments: AttachmentMeta[]): string {
 // Decide qual bucket usar a partir do mime e nome
 function classifyAttachment(file: File): { bucket: StorageBucket; kind: string } {
   const name = file.name.toLowerCase();
-  if (/fatura|invoice/.test(name)) return { bucket: "invoices", kind: "fatura" };
-  if (/fgts/.test(name)) return { bucket: "fgts-statements", kind: "fgts" };
-  if (/contracheque|holerite|payslip/.test(name)) return { bucket: "payslips", kind: "contracheque" };
-  if (/contrato|emprestimo|empr[ée]stimo|loan/.test(name)) return { bucket: "loan-contracts", kind: "contrato" };
-  if (/extrato|statement/.test(name)) return { bucket: "bank-statements", kind: "extrato" };
-  if (file.type.startsWith("image/")) return { bucket: "bank-statements", kind: "extrato" };
+  const mime = file.type.toLowerCase();
+
+  // FGTS — prioridade alta, detecta antes de extrato
+  if (/fgts|caixa.*fgts|fgts.*caixa|extrato.*fgts|fgts.*extrato/.test(name))
+    return { bucket: "fgts-statements", kind: "fgts" };
+
+  // Fatura
+  if (/fatura|invoice/.test(name))
+    return { bucket: "invoices", kind: "fatura" };
+
+  // Contracheque
+  if (/contracheque|holerite|payslip/.test(name))
+    return { bucket: "payslips", kind: "contracheque" };
+
+  // FGTS pelo mime (PDF sem nome específico pode ser FGTS)
+  if (/fgts/.test(name))
+    return { bucket: "fgts-statements", kind: "fgts" };
+
+  // Empréstimo
+  if (/contrato|emprestimo|empr[ée]stimo|loan|financiamento/.test(name))
+    return { bucket: "loan-contracts", kind: "contrato" };
+
+  // Extrato bancário
+  if (/extrato|statement/.test(name))
+    return { bucket: "bank-statements", kind: "extrato" };
+
+  // Imagem — verifica se usuário pediu FGTS no texto
+  if (mime.startsWith("image/"))
+    return { bucket: "bank-statements", kind: "extrato" };
+
+  // PDF genérico — trata como extrato
+  if (mime === "application/pdf")
+    return { bucket: "bank-statements", kind: "extrato" };
+
   return { bucket: "bank-statements", kind: "extrato" };
 }
 
