@@ -157,6 +157,8 @@ export type Database = {
           account_type: Database["public"]["Enums"]["account_type"]
           balance: number
           bank: string
+          bank_color: string | null
+          bank_logo: string | null
           branch: string | null
           color: string | null
           created_at: string
@@ -170,6 +172,8 @@ export type Database = {
           account_type?: Database["public"]["Enums"]["account_type"]
           balance?: number
           bank: string
+          bank_color?: string | null
+          bank_logo?: string | null
           branch?: string | null
           color?: string | null
           created_at?: string
@@ -183,6 +187,8 @@ export type Database = {
           account_type?: Database["public"]["Enums"]["account_type"]
           balance?: number
           bank?: string
+          bank_color?: string | null
+          bank_logo?: string | null
           branch?: string | null
           color?: string | null
           created_at?: string

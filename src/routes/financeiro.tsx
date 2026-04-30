@@ -1,12 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Plus, Building2, Wallet, ArrowUpRight, ArrowDownRight, Trash2, Loader2 } from "lucide-react";
+import { Plus, Wallet, ArrowUpRight, ArrowDownRight, Trash2, Loader2, Building2 } from "lucide-react";
 import { z } from "zod";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
 import { FormDialog } from "@/components/form-dialog";
+import { BankPickerDialog } from "@/components/bank-picker-dialog";
+import { BankLogo } from "@/components/bank-logo";
+import { findBank } from "@/lib/banks";
 import {
   Select,
   SelectContent,
@@ -35,6 +38,8 @@ type BankAccount = {
   account_number: string | null;
   balance: number;
   color: string | null;
+  bank_color: string | null;
+  bank_logo: string | null;
 };
 
 type Tx = {
@@ -53,16 +58,6 @@ const accountTypeLabels: Record<BankAccount["account_type"], string> = {
   wallet: "Carteira Digital",
   other: "Outros",
 };
-
-const accountSchema = z.object({
-  bank: z.string().min(1, "Banco obrigatório"),
-  account_type: z.enum(["checking", "savings", "investment", "wallet", "other"]),
-  branch: z.string().optional(),
-  account_number: z.string().optional(),
-  balance: z.number({ invalid_type_error: "Saldo inválido" }),
-  color: z.string().optional(),
-});
-type AccountForm = z.infer<typeof accountSchema>;
 
 const txSchema = z.object({
   description: z.string().min(1, "Descrição obrigatória"),
@@ -126,38 +121,8 @@ function FinanceiroPage() {
         <section>
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Contas bancárias</h3>
-            <FormDialog<AccountForm>
-              title="Nova conta bancária"
-              description="Cadastre uma conta para começar a controlar saldos e movimentações."
+            <BankPickerDialog
               trigger={accountTrigger}
-              schema={accountSchema}
-              defaultValues={{
-                bank: "",
-                account_type: "checking",
-                branch: "",
-                account_number: "",
-                balance: 0,
-                color: "#689F7A",
-              }}
-              fields={[
-                { name: "bank", label: "Banco", type: "text", placeholder: "Itaú, Nubank, BTG..." },
-                {
-                  name: "account_type",
-                  label: "Tipo",
-                  type: "select",
-                  options: [
-                    { value: "checking", label: "Conta Corrente" },
-                    { value: "savings", label: "Poupança" },
-                    { value: "investment", label: "Investimentos" },
-                    { value: "wallet", label: "Carteira Digital" },
-                    { value: "other", label: "Outros" },
-                  ],
-                },
-                { name: "branch", label: "Agência", type: "text" },
-                { name: "account_number", label: "Conta", type: "text" },
-                { name: "balance", label: "Saldo inicial", type: "number", step: "0.01" },
-                { name: "color", label: "Cor", type: "color" },
-              ]}
               onSubmit={async (v) => {
                 await insertAccount.mutateAsync({
                   bank: v.bank,
@@ -165,7 +130,9 @@ function FinanceiroPage() {
                   branch: v.branch || null,
                   account_number: v.account_number || null,
                   balance: v.balance,
-                  color: v.color || null,
+                  color: v.color,
+                  bank_color: v.bank_color,
+                  bank_logo: v.bank_logo,
                 });
               }}
             />
@@ -183,40 +150,44 @@ function FinanceiroPage() {
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {accounts.map((a) => (
-                <div
-                  key={a.id}
-                  className="group relative rounded-2xl border border-border/60 bg-card p-5 shadow-card transition hover:border-primary/30"
-                >
-                  <button
-                    onClick={() => removeAccount.mutate(a.id)}
-                    className="absolute right-3 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                    aria-label="Remover conta"
+              {accounts.map((a) => {
+                const bankDef = findBank(a.bank);
+                const color = a.bank_color ?? bankDef?.color ?? a.color ?? "#689F7A";
+                const logo = a.bank_logo ?? bankDef?.logo ?? null;
+                return (
+                  <div
+                    key={a.id}
+                    style={{
+                      borderLeft: `4px solid ${color}`,
+                      background: `linear-gradient(135deg, ${color}0D 0%, transparent 70%)`,
+                    }}
+                    className="group relative rounded-2xl border border-border/60 p-5 shadow-card transition hover:border-primary/30"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                  <div className="flex items-center justify-between">
-                    <div
-                      className="flex h-10 w-10 items-center justify-center rounded-xl text-white"
-                      style={{ background: a.color ?? "#689F7A" }}
+                    <button
+                      onClick={() => removeAccount.mutate(a.id)}
+                      className="absolute right-3 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                      aria-label="Remover conta"
                     >
-                      <Building2 className="h-5 w-5" />
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                    <div className="flex items-center justify-between">
+                      <BankLogo name={a.bank} logo={logo} color={color} size={40} />
+                      <Badge variant="outline" className="border-border/60 text-xs">
+                        {accountTypeLabels[a.account_type]}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="border-border/60 text-xs">
-                      {accountTypeLabels[a.account_type]}
-                    </Badge>
+                    <p className="mt-4 text-sm font-medium">{a.bank}</p>
+                    <p className="mt-1 text-2xl font-semibold tracking-tight">{formatBRL(Number(a.balance))}</p>
+                    {(a.branch || a.account_number) && (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {a.branch && `Ag. ${a.branch}`}
+                        {a.branch && a.account_number && " · "}
+                        {a.account_number && `Cc. ${a.account_number}`}
+                      </p>
+                    )}
                   </div>
-                  <p className="mt-4 text-sm font-medium">{a.bank}</p>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight">{formatBRL(Number(a.balance))}</p>
-                  {(a.branch || a.account_number) && (
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {a.branch && `Ag. ${a.branch}`}
-                      {a.branch && a.account_number && " · "}
-                      {a.account_number && `Cc. ${a.account_number}`}
-                    </p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -302,7 +273,11 @@ function FinanceiroPage() {
             <div className="divide-y divide-border/60">
               {sortedTxs.map((t, idx) => {
                 const positive = t.kind === "income" || Number(t.amount) > 0;
-                const accountName = accounts.find((a) => a.id === t.bank_account_id)?.bank ?? "Sem conta vinculada";
+                const acc = accounts.find((a) => a.id === t.bank_account_id);
+                const accountName = acc?.bank ?? "Sem conta vinculada";
+                const accBankDef = findBank(acc?.bank);
+                const accColor = acc?.bank_color ?? accBankDef?.color ?? acc?.color ?? "#6B7280";
+                const accLogo = acc?.bank_logo ?? accBankDef?.logo ?? null;
                 const prevKey = idx > 0 ? (sortedTxs[idx - 1].bank_account_id ?? "~none") : null;
                 const currKey = t.bank_account_id ?? "~none";
                 const showHeader = prevKey !== currKey;
@@ -310,7 +285,11 @@ function FinanceiroPage() {
                   <div key={t.id}>
                     {showHeader && (
                       <div className="flex items-center gap-2 pt-4 pb-2 first:pt-0">
-                        <Building2 className="h-3.5 w-3.5 text-primary" />
+                        {acc ? (
+                          <BankLogo name={accountName} logo={accLogo} color={accColor} size={24} />
+                        ) : (
+                          <Building2 className="h-3.5 w-3.5 text-primary" />
+                        )}
                         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                           {accountName}
                         </span>
