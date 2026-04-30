@@ -334,6 +334,45 @@ async function logAudit(supabase: any, params: {
   }
 }
 
+function parseFgtsPdfText(text: string): Array<{
+  occurred_at: string;
+  entry_type: string;
+  amount: number;
+  notes: string;
+}> {
+  const entries: Array<{ occurred_at: string; entry_type: string; amount: number; notes: string }> = [];
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+
+  const dateRe = /^(\d{2})\/(\d{2})\/(\d{4})\s+(.+?)\s+([-]?R\$\s*[\d.,]+)\s+(R\$\s*[\d.,]+)$/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = line.match(dateRe);
+    if (m) {
+      const dd = m[1], mm = m[2], yyyy = m[3];
+      const desc = m[4].trim();
+      const valStr = m[5].replace(/R\$\s*/g, "").replace(/\./g, "").replace(",", ".").trim();
+      const amount = Math.abs(parseFloat(valStr));
+      if (!isFinite(amount) || amount === 0) continue;
+
+      const occurred_at = `${yyyy}-${mm}-${dd}`;
+      const descLower = desc.toLowerCase();
+      let entry_type = "outro";
+      if (descLower.includes("115-deposito") || descLower.includes("deposito")) entry_type = "deposito";
+      else if (
+        descLower.includes("credito de jam") ||
+        descLower.includes("ac cred") ||
+        descLower.includes("ac aut") ||
+        descLower.includes("regularizacao")
+      ) entry_type = "jam";
+      else if (descLower.includes("saque")) entry_type = "saque";
+
+      entries.push({ occurred_at, entry_type, amount, notes: desc });
+    }
+  }
+  return entries;
+}
+
 export const extractDocument = createServerFn({ method: "POST" })
   .inputValidator((d) => ExtractInput.parse(d))
   .handler(async ({ data }) => {
