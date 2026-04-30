@@ -12,6 +12,7 @@ import {
   Sparkles,
   Landmark,
   Banknote,
+  Settings,
   LogOut,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -46,6 +47,7 @@ const planningItems = [
   { title: "Metas", url: "/metas", icon: Target },
   { title: "Investimentos", url: "/investimentos", icon: TrendingUp },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
+  { title: "Configurações", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {

@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as RecorrentesRouteImport } from './routes/recorrentes'
 import { Route as MetasRouteImport } from './routes/metas'
@@ -25,6 +26,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ImportReviewIdRouteImport } from './routes/import.review.$id'
 import { Route as ApiImportExtratoRouteImport } from './routes/api/import.extrato'
 
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RelatoriosRoute = RelatoriosRouteImport.update({
   id: '/relatorios',
   path: '/relatorios',
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/metas': typeof MetasRoute
   '/recorrentes': typeof RecorrentesRoute
   '/relatorios': typeof RelatoriosRoute
+  '/settings': typeof SettingsRoute
   '/api/import/extrato': typeof ApiImportExtratoRoute
   '/import/review/$id': typeof ImportReviewIdRoute
 }
@@ -132,6 +139,7 @@ export interface FileRoutesByTo {
   '/metas': typeof MetasRoute
   '/recorrentes': typeof RecorrentesRoute
   '/relatorios': typeof RelatoriosRoute
+  '/settings': typeof SettingsRoute
   '/api/import/extrato': typeof ApiImportExtratoRoute
   '/import/review/$id': typeof ImportReviewIdRoute
 }
@@ -150,6 +158,7 @@ export interface FileRoutesById {
   '/metas': typeof MetasRoute
   '/recorrentes': typeof RecorrentesRoute
   '/relatorios': typeof RelatoriosRoute
+  '/settings': typeof SettingsRoute
   '/api/import/extrato': typeof ApiImportExtratoRoute
   '/import/review/$id': typeof ImportReviewIdRoute
 }
@@ -169,6 +178,7 @@ export interface FileRouteTypes {
     | '/metas'
     | '/recorrentes'
     | '/relatorios'
+    | '/settings'
     | '/api/import/extrato'
     | '/import/review/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/metas'
     | '/recorrentes'
     | '/relatorios'
+    | '/settings'
     | '/api/import/extrato'
     | '/import/review/$id'
   id:
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '/metas'
     | '/recorrentes'
     | '/relatorios'
+    | '/settings'
     | '/api/import/extrato'
     | '/import/review/$id'
   fileRoutesById: FileRoutesById
@@ -221,12 +233,20 @@ export interface RootRouteChildren {
   MetasRoute: typeof MetasRoute
   RecorrentesRoute: typeof RecorrentesRoute
   RelatoriosRoute: typeof RelatoriosRoute
+  SettingsRoute: typeof SettingsRoute
   ApiImportExtratoRoute: typeof ApiImportExtratoRoute
   ImportReviewIdRoute: typeof ImportReviewIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/relatorios': {
       id: '/relatorios'
       path: '/relatorios'
@@ -349,6 +369,7 @@ const rootRouteChildren: RootRouteChildren = {
   MetasRoute: MetasRoute,
   RecorrentesRoute: RecorrentesRoute,
   RelatoriosRoute: RelatoriosRoute,
+  SettingsRoute: SettingsRoute,
   ApiImportExtratoRoute: ApiImportExtratoRoute,
   ImportReviewIdRoute: ImportReviewIdRoute,
 }
