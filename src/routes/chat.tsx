@@ -171,40 +171,62 @@ function smartReply(text: string, attachments: AttachmentMeta[]): string {
   return "Analisando sua posição consolidada: posso comentar gastos, sugerir realocações de portfólio e gerar relatórios. Anexe extratos, faturas ou contracheques quando precisar que eu atualize seus dados.";
 }
 
+// Override: o texto do usuário tem prioridade máxima sobre o nome do arquivo
+function overrideKindByUserText(text: string): string | null {
+  const t = text.toLowerCase();
+  if (/fgts|fundo\s+de\s+garantia/.test(t)) return "fgts";
+  if (/contracheque|holerite|contra\s+cheque/.test(t)) return "contracheque";
+  if (/fatura|cartão|cartao/.test(t)) return "fatura";
+  if (/empr[eé]stimo|financiamento|d[ií]vida|consignado|contrato/.test(t)) return "contrato";
+  if (/extrato\s+banc|extrato\s+da\s+conta|extrato\s+pix/.test(t)) return "extrato";
+  return null;
+}
+
 // Decide qual bucket usar a partir do mime e nome
-function classifyAttachment(file: File): { bucket: StorageBucket; kind: string } {
+function classifyAttachment(
+  file: File,
+  userText?: string,
+): { bucket: StorageBucket; kind: string } {
+  // 1) PRIORIDADE MÁXIMA: o que o usuário disse explicitamente
+  if (userText) {
+    const override = overrideKindByUserText(userText);
+    if (override) {
+      const bucketMap: Record<string, StorageBucket> = {
+        fgts: "fgts-statements",
+        contracheque: "payslips",
+        fatura: "invoices",
+        contrato: "loan-contracts",
+        extrato: "bank-statements",
+      };
+      return { bucket: bucketMap[override] ?? "bank-statements", kind: override };
+    }
+  }
+
   const name = file.name.toLowerCase();
   const mime = file.type.toLowerCase();
 
-  // FGTS — prioridade alta, detecta antes de extrato
+  // 2) Nome do arquivo
   if (/fgts|caixa.*fgts|fgts.*caixa|extrato.*fgts|fgts.*extrato/.test(name))
     return { bucket: "fgts-statements", kind: "fgts" };
 
-  // Fatura
   if (/fatura|invoice/.test(name))
     return { bucket: "invoices", kind: "fatura" };
 
-  // Contracheque
   if (/contracheque|holerite|payslip/.test(name))
     return { bucket: "payslips", kind: "contracheque" };
 
-  // FGTS pelo mime (PDF sem nome específico pode ser FGTS)
   if (/fgts/.test(name))
     return { bucket: "fgts-statements", kind: "fgts" };
 
-  // Empréstimo
   if (/contrato|emprestimo|empr[ée]stimo|loan|financiamento/.test(name))
     return { bucket: "loan-contracts", kind: "contrato" };
 
-  // Extrato bancário
   if (/extrato|statement/.test(name))
     return { bucket: "bank-statements", kind: "extrato" };
 
-  // Imagem — verifica se usuário pediu FGTS no texto
   if (mime.startsWith("image/"))
     return { bucket: "bank-statements", kind: "extrato" };
 
-  // PDF genérico — trata como extrato
   if (mime === "application/pdf")
     return { bucket: "bank-statements", kind: "extrato" };
 
@@ -411,7 +433,7 @@ function ChatPage() {
         imagem: "image",
       };
       for (const file of filesToSend) {
-        const { bucket, kind } = classifyAttachment(file);
+        const { bucket, kind } = classifyAttachment(file, text);
         const up = await uploadFile({ bucket, userId: user.id, file, prefix: "chat" });
         attachments.push({ filename: up.filename, bucket, path: up.path, mime: up.mime, size: up.size, kind });
         const ufRes = await supabase
@@ -988,7 +1010,7 @@ function ChatPage() {
           {pending.length > 0 && (
             <div className="flex flex-wrap gap-2 border-t border-border/40 px-4 pt-3">
               {pending.map((f, i) => {
-                const { kind } = classifyAttachment(f);
+                const { kind } = classifyAttachment(f, input);
                 return (
                   <div
                     key={i}
