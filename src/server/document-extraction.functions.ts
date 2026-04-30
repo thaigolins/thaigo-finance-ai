@@ -86,7 +86,7 @@ const schemaPrompts: Record<Kind, string> = {
   ]
 }
 Use 'income' para créditos e 'expense' para débitos. amount sempre positivo.`,
-  fgts: `Extraia do extrato do FGTS o seguinte JSON:
+  fgts: `Extraia do extrato do FGTS o seguinte JSON com TODOS os lançamentos:
 {
   "kind": "fgts",
   "employer": "string",
@@ -97,9 +97,26 @@ Use 'income' para créditos e 'expense' para débitos. amount sempre positivo.`,
   "jam_month": number,
   "last_movement": "YYYY-MM-DD|null",
   "entries": [
-    { "occurred_at": "YYYY-MM-DD", "entry_type": "deposito|jam|saque|outro", "amount": number, "notes": "string|null" }
+    {
+      "occurred_at": "YYYY-MM-DD",
+      "entry_type": "deposito|jam|saque|outro",
+      "amount": number,
+      "notes": "string|null"
+    }
   ]
-}`,
+}
+REGRAS CRÍTICAS:
+- entries deve conter TODOS os lançamentos da tabela do documento, sem exceção
+- Para cada linha da tabela: DATA | LANÇAMENTO | VALOR | TOTAL
+- entry_type: "deposito" para linhas com "115-DEPOSITO" ou "DEPOSITO"
+- entry_type: "jam" para linhas com "CREDITO DE JAM", "AC CRED", "AC AUT", "REGULARIZACAO"
+- entry_type: "saque" para linhas com "SAQUE", negativo
+- amount: sempre positivo (use Math.abs do valor)
+- balance = valor da última linha da coluna TOTAL
+- monthly_deposit = média dos últimos 3 depósitos mensais
+- jam_month = valor do JAM mais recente
+- last_movement = data do último lançamento
+- NÃO omita nenhum lançamento. O documento pode ter 200+ linhas — extraia TODAS.`,
   emprestimo: `Extraia do contrato/extrato de empréstimo ou financiamento o seguinte JSON:
 {
   "kind": "emprestimo",
