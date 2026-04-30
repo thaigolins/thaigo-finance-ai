@@ -354,3 +354,56 @@ export const aiFinancialChat = createServerFn({ method: "POST" })
 
     return { ok: true as const, reply };
   });
+
+const TitleInputSchema = z.object({
+  firstMessage: z.string().min(1).max(500),
+});
+
+export const aiGenerateConversationTitle = createServerFn({ method: "POST" })
+  .inputValidator((input) => TitleInputSchema.parse(input))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.LOVABLE_API_KEY;
+    const fallback = (() => {
+      const words = data.firstMessage.trim().split(/\s+/);
+      const head = words.slice(0, 5).join(" ");
+      return words.length > 5 ? head + "..." : head;
+    })();
+
+    if (!apiKey) return { title: fallback };
+
+    try {
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            {
+              role: "system",
+              content:
+                "Gere um título curto (máximo 5 palavras) em português para uma conversa que começa com esta mensagem. Retorne APENAS o título, sem aspas, sem pontuação final.",
+            },
+            { role: "user", content: data.firstMessage.slice(0, 200) },
+          ],
+          max_tokens: 20,
+          temperature: 0.3,
+        }),
+      });
+
+      if (!res.ok) return { title: fallback };
+
+      const json = (await res.json()) as {
+        choices?: { message?: { content?: string } }[];
+      };
+      const generated = json.choices?.[0]?.message?.content?.trim()?.replace(/^["']|["']$/g, "");
+      if (generated && generated.length > 0 && generated.length < 60) {
+        return { title: generated };
+      }
+      return { title: fallback };
+    } catch {
+      return { title: fallback };
+    }
+  });
