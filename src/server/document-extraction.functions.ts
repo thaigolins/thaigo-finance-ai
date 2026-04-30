@@ -334,6 +334,45 @@ async function logAudit(supabase: any, params: {
   }
 }
 
+function parseFgtsPdfText(text: string): Array<{
+  occurred_at: string;
+  entry_type: string;
+  amount: number;
+  notes: string;
+}> {
+  const entries: Array<{ occurred_at: string; entry_type: string; amount: number; notes: string }> = [];
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+
+  const dateRe = /^(\d{2})\/(\d{2})\/(\d{4})\s+(.+?)\s+([-]?R\$\s*[\d.,]+)\s+(R\$\s*[\d.,]+)$/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = line.match(dateRe);
+    if (m) {
+      const dd = m[1], mm = m[2], yyyy = m[3];
+      const desc = m[4].trim();
+      const valStr = m[5].replace(/R\$\s*/g, "").replace(/\./g, "").replace(",", ".").trim();
+      const amount = Math.abs(parseFloat(valStr));
+      if (!isFinite(amount) || amount === 0) continue;
+
+      const occurred_at = `${yyyy}-${mm}-${dd}`;
+      const descLower = desc.toLowerCase();
+      let entry_type = "outro";
+      if (descLower.includes("115-deposito") || descLower.includes("deposito")) entry_type = "deposito";
+      else if (
+        descLower.includes("credito de jam") ||
+        descLower.includes("ac cred") ||
+        descLower.includes("ac aut") ||
+        descLower.includes("regularizacao")
+      ) entry_type = "jam";
+      else if (descLower.includes("saque")) entry_type = "saque";
+
+      entries.push({ occurred_at, entry_type, amount, notes: desc });
+    }
+  }
+  return entries;
+}
+
 export const extractDocument = createServerFn({ method: "POST" })
   .inputValidator((d) => ExtractInput.parse(d))
   .handler(async ({ data }) => {
@@ -414,10 +453,42 @@ export const extractDocument = createServerFn({ method: "POST" })
       const entriesContent = entriesJson.choices?.[0]?.message?.content ?? "";
       const entriesParsed = (safeParseJson(entriesContent) as Record<string, unknown> | null) ?? {};
 
-      const entriesArr = Array.isArray((entriesParsed as { entries?: unknown }).entries)
+      let entriesArr = Array.isArray((entriesParsed as { entries?: unknown }).entries)
         ? ((entriesParsed as { entries: unknown[] }).entries)
         : [];
       console.log("[extractDocument] FGTS 2-step: header keys", Object.keys(headerParsed).length, "entries", entriesArr.length);
+
+      // Fallback: se Gemini não retornou entries, tenta parse determinístico via OCR de texto
+      if (entriesArr.length === 0 && data.mime === "application/pdf") {
+        console.log("[extractDocument] FGTS: Gemini retornou 0 entries, tentando parse de texto do PDF");
+        const ocrMessages = [
+          { role: "system", content: "Você é um OCR. Transcreva TODO o texto do PDF linha por linha, preservando a estrutura da tabela com datas, descrições e valores." },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Transcreva todo o texto deste PDF preservando cada linha da tabela com: DATA | LANÇAMENTO | VALOR | TOTAL. Uma linha por lançamento." },
+              { type: "image_url", image_url: { url: `data:${data.mime};base64,${base64}` } },
+            ],
+          },
+        ];
+        const ocrRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "google/gemini-2.5-pro", messages: ocrMessages, temperature: 0, max_tokens: 16000 }),
+        });
+        if (ocrRes.ok) {
+          const ocrJson = (await ocrRes.json()) as { choices?: { message?: { content?: string } }[] };
+          const ocrText = ocrJson.choices?.[0]?.message?.content ?? "";
+          console.log("[extractDocument] FGTS OCR text length:", ocrText.length, "preview:", ocrText.slice(0, 300));
+          const parsed = parseFgtsPdfText(ocrText);
+          console.log("[extractDocument] FGTS deterministic parse:", parsed.length, "entries");
+          if (parsed.length > 0) {
+            entriesArr = parsed;
+          }
+        } else {
+          console.error("[extractDocument] FGTS OCR fallback gateway error", ocrRes.status);
+        }
+      }
 
       payload = {
         ...headerParsed,
