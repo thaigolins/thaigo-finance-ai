@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { aiFinancialChat } from "@/server/ai-financial-chat.functions";
+import { aiFinancialChat, aiGenerateConversationTitle } from "@/server/ai-financial-chat.functions";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Send,
@@ -333,9 +333,21 @@ function ChatPage() {
 
   const newConversation = async (firstMessage?: string) => {
     if (!user?.id) return null;
-    const title = firstMessage
-      ? firstMessage.slice(0, 60) + (firstMessage.length > 60 ? "…" : "")
-      : "Nova conversa";
+
+    let title = "Nova conversa";
+    if (firstMessage && firstMessage.trim().length > 3) {
+      // Fallback imediato: primeiras 5 palavras
+      const words = firstMessage.trim().split(/\s+/);
+      title = words.slice(0, 5).join(" ") + (words.length > 5 ? "..." : "");
+      // Tenta gerar título inteligente via IA (server-side)
+      try {
+        const result = await aiGenerateConversationTitle({ data: { firstMessage } });
+        if (result?.title && result.title.length > 0 && result.title.length < 60) {
+          title = result.title;
+        }
+      } catch { /* mantém fallback */ }
+    }
+
     const conv = (await insertConv.mutateAsync({ title })) as Conversation;
     setActiveId(conv.id);
     setSidebarOpen(false);

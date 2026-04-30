@@ -46,12 +46,16 @@ function buildSystemPrompt(snap: FinancialSnapshot, userName: string | null) {
   lines.push("Você é a IA Financeira Private do Thaigo Finance AI.");
   lines.push("Seu perfil: private banker digital brasileiro de altíssimo nível.");
   lines.push("");
-  lines.push("PERSONALIDADE E ESTILO:");
-  lines.push("- Tom executivo, direto, elegante e empático — como um banker do Itaú Private");
-  lines.push("- Use markdown: **negrito**, listas, tabelas quando útil");
-  lines.push("- Respostas objetivas mas completas — nunca superficiais");
-  lines.push("- Faça perguntas de follow-up quando relevante");
-  lines.push("- Demonstre raciocínio financeiro sofisticado");
+  lines.push("ESTILO DE RESPOSTA:");
+  lines.push("- Use emojis estrategicamente para facilitar leitura visual (💰 💳 📊 🏦 ✅ ⚠️ 🎯 📈 📉 💡)");
+  lines.push("- Separe bem os blocos com linhas em branco entre seções");
+  lines.push("- Use **negrito** para destacar valores e conceitos importantes");
+  lines.push("- Use listas com bullet points (•) para informações múltiplas");
+  lines.push("- Use tabelas markdown quando comparar valores");
+  lines.push("- Respostas longas: use headers ## para seções");
+  lines.push("- Termine sempre com 💡 **Dica:** ou 🎯 **Recomendação:** quando relevante");
+  lines.push("- Tom: direto, claro, sem jargão desnecessário — como um amigo especialista");
+  lines.push("- Nunca use linguagem muito formal ou distante");
   lines.push("");
   lines.push("CAPACIDADES:");
   lines.push("- Análise patrimonial completa com base nos dados reais");
@@ -66,7 +70,6 @@ function buildSystemPrompt(snap: FinancialSnapshot, userName: string | null) {
   lines.push("- Use SEMPRE os dados reais do snapshot abaixo");
   lines.push("- Nunca invente dados — se não souber, diga claramente");
   lines.push("- Se o dado não estiver cadastrado, oriente como cadastrar");
-  lines.push("- Termine respostas longas com 1 insight ou recomendação prática");
   lines.push("- Para dúvidas gerais financeiras (FGTS, impostos, etc.) responda com conhecimento técnico mesmo sem dados do usuário");
   lines.push("- Seja conversacional — responda perguntas simples de forma simples");
   lines.push("");
@@ -350,4 +353,57 @@ export const aiFinancialChat = createServerFn({ method: "POST" })
       "Não consegui gerar uma resposta agora. Pode reformular sua pergunta?";
 
     return { ok: true as const, reply };
+  });
+
+const TitleInputSchema = z.object({
+  firstMessage: z.string().min(1).max(500),
+});
+
+export const aiGenerateConversationTitle = createServerFn({ method: "POST" })
+  .inputValidator((input) => TitleInputSchema.parse(input))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.LOVABLE_API_KEY;
+    const fallback = (() => {
+      const words = data.firstMessage.trim().split(/\s+/);
+      const head = words.slice(0, 5).join(" ");
+      return words.length > 5 ? head + "..." : head;
+    })();
+
+    if (!apiKey) return { title: fallback };
+
+    try {
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            {
+              role: "system",
+              content:
+                "Gere um título curto (máximo 5 palavras) em português para uma conversa que começa com esta mensagem. Retorne APENAS o título, sem aspas, sem pontuação final.",
+            },
+            { role: "user", content: data.firstMessage.slice(0, 200) },
+          ],
+          max_tokens: 20,
+          temperature: 0.3,
+        }),
+      });
+
+      if (!res.ok) return { title: fallback };
+
+      const json = (await res.json()) as {
+        choices?: { message?: { content?: string } }[];
+      };
+      const generated = json.choices?.[0]?.message?.content?.trim()?.replace(/^["']|["']$/g, "");
+      if (generated && generated.length > 0 && generated.length < 60) {
+        return { title: generated };
+      }
+      return { title: fallback };
+    } catch {
+      return { title: fallback };
+    }
   });
