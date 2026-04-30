@@ -157,6 +157,81 @@ const summaryPrompt: Record<Kind, string> = {
   contracheque: "Resuma o contracheque em 1-2 linhas (empregador, mês, bruto, líquido).",
 };
 
+const fgtsHeaderPrompt = `Extraia apenas o cabeçalho do extrato FGTS:
+{
+  "kind": "fgts",
+  "employer": "string",
+  "cnpj": "string|null",
+  "status": "ativa",
+  "balance": number,
+  "monthly_deposit": number,
+  "jam_month": number,
+  "last_movement": "YYYY-MM-DD|null"
+}`;
+
+function buildEntriesMessages(fileBase64: string, mime: string, filename: string) {
+  return [
+    {
+      role: "system",
+      content: "Você é um OCR especializado em extratos FGTS brasileiros. Extraia TODOS os lançamentos da tabela do documento.",
+    },
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: `Documento: ${filename} (${mime})
+
+Extraia TODOS os lançamentos desta tabela de extrato FGTS e retorne APENAS este JSON sem markdown:
+{
+  "entries": [
+    {"occurred_at": "YYYY-MM-DD", "entry_type": "deposito|jam|saque|outro", "amount": number, "notes": "descrição do lançamento"}
+  ]
+}
+
+Regras:
+- occurred_at: data da coluna DATA no formato YYYY-MM-DD
+- entry_type: "deposito" para 115-DEPOSITO, "jam" para CREDITO DE JAM/AC CRED/AC AUT, "saque" para SAQUE DEP/SAQUE JAM
+- amount: valor POSITIVO da coluna VALOR (ignore negativos, use Math.abs)
+- notes: texto da coluna LANCAMENTO
+- Inclua ABSOLUTAMENTE TODOS os lançamentos, do primeiro ao último.
+- Não omita nenhuma linha da tabela.`,
+        },
+        {
+          type: "image_url",
+          image_url: { url: `data:${mime};base64,${fileBase64}` },
+        },
+      ],
+    },
+  ];
+}
+
+function buildFgtsHeaderMessages(fileBase64: string, mime: string, filename: string) {
+  const sys = `Você é um analista financeiro brasileiro especializado em leitura de documentos.
+Extraia dados ESTRUTURADOS do documento anexo seguindo EXATAMENTE o schema JSON solicitado.
+Regras:
+- Responda SOMENTE com JSON válido (sem markdown, sem cercas \`\`\`).
+- Use ponto como separador decimal. Valores numéricos sem prefixo R$.
+- Datas no formato ISO (YYYY-MM-DD). Se uma data não estiver clara, use null.
+- Não invente dados. Se um campo não existir no documento, use null ou 0.`;
+  const userText = `Documento: ${filename} (${mime})
+Tipo: fgts (somente cabeçalho)
+
+${fgtsHeaderPrompt}
+
+Retorne APENAS o JSON. Nada mais.`;
+  return [
+    { role: "system", content: sys },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: userText },
+        { type: "image_url", image_url: { url: `data:${mime};base64,${fileBase64}` } },
+      ],
+    },
+  ];
+}
+
 function buildExtractionMessages(kind: Kind, fileBase64: string, mime: string, filename: string) {
   const sys = `Você é um analista financeiro brasileiro especializado em leitura de documentos.
 Extraia dados ESTRUTURADOS do documento anexo seguindo EXATAMENTE o schema JSON solicitado.
