@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { extractTextFromPdfBytes } from "./pdf-text-extractor.server";
+import { parseFgtsEntries } from "./fgts-parser.server";
 
 // Auth manual via token passado no input (mesmo padrão usado em startImport).
 // Retorna { supabase, userId } ou um erro pronto para devolver ao cliente.
@@ -446,8 +448,6 @@ export const extractDocument = createServerFn({ method: "POST" })
 
       if (data.mime === "application/pdf") {
         try {
-          const { extractTextFromPdfBytes } = await import("./pdf-text-extractor.server");
-          const { parseFgtsEntries } = await import("./fgts-parser.server");
           const pdfText = await extractTextFromPdfBytes(bytes);
           console.log("[extractDocument] FGTS PDF text length:", pdfText.length, "preview:", pdfText.slice(0, 300));
           if (pdfText.length > 50) {
