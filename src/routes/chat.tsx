@@ -744,6 +744,12 @@ function ChatPage() {
             .slice(-20)
             .filter((m) => m.role === "user" || m.role === "assistant")
             .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+          console.log("[chat] calling aiChat with:", {
+            conversationId: convId,
+            userMessage: userText.slice(0, 50),
+            historyLength: history.length,
+            attachments: attachments.length,
+          });
           const result = await aiChat({
             data: {
               conversationId: convId,
@@ -757,9 +763,15 @@ function ChatPage() {
               })),
             },
           });
-          replyContent = result.reply;
+          console.log("[chat] aiChat result:", result);
+          replyContent = result?.reply ?? "";
+          if (!replyContent) {
+            console.warn("[chat] aiChat returned empty reply", result);
+            replyContent = smartReply(text, attachments);
+          }
         } catch (err) {
-          console.error(err);
+          console.error("[chat] aiChat error:", err);
+          toast.error(err instanceof Error ? err.message : "Falha ao consultar IA");
           replyContent = smartReply(text, attachments);
         }
       } else if (!anyExtracted && attachments.length > 0) {
@@ -770,7 +782,11 @@ function ChatPage() {
       if (replyContent) {
         await persistMessage(convId, "assistant", replyContent, []);
       }
-      invalidateMessages();
+      await invalidateMessages();
+      setTimeout(() => {
+        const el = scrollRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      }, 100);
 
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao enviar");
