@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { FormDialog } from "@/components/form-dialog";
+import { BankPickerDialog } from "@/components/bank-picker-dialog";
 import { BankPickerDialog } from "@/components/bank-picker-dialog";
 import { BankLogo } from "@/components/bank-logo";
 import { findBank } from "@/lib/banks";
@@ -82,16 +82,6 @@ const accountTypeLabels: Record<BankAccount["account_type"], string> = {
   wallet: "Carteira Digital",
   other: "Outros",
 };
-
-const accountSchema = z.object({
-  bank: z.string().min(1, "Banco obrigatório"),
-  account_type: z.enum(["checking", "savings", "investment", "wallet", "other"]),
-  branch: z.string().optional(),
-  account_number: z.string().optional(),
-  balance: z.number({ invalid_type_error: "Saldo inválido" }),
-  color: z.string().optional(),
-});
-type AccountForm = z.infer<typeof accountSchema>;
 
 type Preferences = {
   theme: "dark" | "light";
