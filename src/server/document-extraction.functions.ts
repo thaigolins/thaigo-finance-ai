@@ -362,37 +362,102 @@ export const extractDocument = createServerFn({ method: "POST" })
       return { ok: false as const, error: "Arquivo muito grande para leitura por IA (máx ~6MB)." };
     }
 
-    const messages = buildExtractionMessages(data.kind, base64, data.mime, data.filename);
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages,
-        temperature: 0.1,
-        max_tokens: 8000,
-        response_format: { type: "json_object" },
-      }),
-    });
+    let payload: Record<string, unknown>;
 
-    if (!res.ok) {
-      const status = res.status;
-      let detail = "";
-      try { detail = await res.text(); } catch { /* ignore */ }
-      console.error("Extraction gateway error", status, detail);
-      if (status === 429) return { ok: false as const, error: "Limite de uso atingido. Aguarde e tente novamente." };
-      if (status === 402) return { ok: false as const, error: "Créditos do gateway de IA esgotados." };
-      return { ok: false as const, error: `Gateway respondeu ${status}.` };
+    if (data.kind === "fgts") {
+      // FGTS em 2 etapas: cabeçalho + entries (sem response_format para não cortar JSON longo)
+      const headerMessages = buildFgtsHeaderMessages(base64, data.mime, data.filename);
+      const headerRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: headerMessages,
+          temperature: 0.1,
+          max_tokens: 2000,
+        }),
+      });
+      if (!headerRes.ok) {
+        const status = headerRes.status;
+        let detail = "";
+        try { detail = await headerRes.text(); } catch { /* ignore */ }
+        console.error("FGTS header gateway error", status, detail);
+        if (status === 429) return { ok: false as const, error: "Limite de uso atingido. Aguarde e tente novamente." };
+        if (status === 402) return { ok: false as const, error: "Créditos do gateway de IA esgotados." };
+        return { ok: false as const, error: `Gateway respondeu ${status}.` };
+      }
+      const headerJson = (await headerRes.json()) as { choices?: { message?: { content?: string } }[] };
+      const headerContent = headerJson.choices?.[0]?.message?.content ?? "";
+      const headerParsed = (safeParseJson(headerContent) as Record<string, unknown> | null) ?? {};
+
+      const entriesMessages = buildEntriesMessages(base64, data.mime, data.filename);
+      const entriesRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-pro",
+          messages: entriesMessages,
+          temperature: 0.1,
+          max_tokens: 16000,
+        }),
+      });
+      if (!entriesRes.ok) {
+        const status = entriesRes.status;
+        let detail = "";
+        try { detail = await entriesRes.text(); } catch { /* ignore */ }
+        console.error("FGTS entries gateway error", status, detail);
+        if (status === 429) return { ok: false as const, error: "Limite de uso atingido. Aguarde e tente novamente." };
+        if (status === 402) return { ok: false as const, error: "Créditos do gateway de IA esgotados." };
+        return { ok: false as const, error: `Gateway respondeu ${status}.` };
+      }
+      const entriesJson = (await entriesRes.json()) as { choices?: { message?: { content?: string } }[] };
+      const entriesContent = entriesJson.choices?.[0]?.message?.content ?? "";
+      const entriesParsed = (safeParseJson(entriesContent) as Record<string, unknown> | null) ?? {};
+
+      const entriesArr = Array.isArray((entriesParsed as { entries?: unknown }).entries)
+        ? ((entriesParsed as { entries: unknown[] }).entries)
+        : [];
+      console.log("[extractDocument] FGTS 2-step: header keys", Object.keys(headerParsed).length, "entries", entriesArr.length);
+
+      payload = {
+        ...headerParsed,
+        kind: "fgts",
+        entries: entriesArr,
+      };
+    } else {
+      const messages = buildExtractionMessages(data.kind, base64, data.mime, data.filename);
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages,
+          temperature: 0.1,
+          max_tokens: 8000,
+          response_format: { type: "json_object" },
+        }),
+      });
+
+      if (!res.ok) {
+        const status = res.status;
+        let detail = "";
+        try { detail = await res.text(); } catch { /* ignore */ }
+        console.error("Extraction gateway error", status, detail);
+        if (status === 429) return { ok: false as const, error: "Limite de uso atingido. Aguarde e tente novamente." };
+        if (status === 402) return { ok: false as const, error: "Créditos do gateway de IA esgotados." };
+        return { ok: false as const, error: `Gateway respondeu ${status}.` };
+      }
+
+      const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      const content = json.choices?.[0]?.message?.content ?? "";
+      const parsed = safeParseJson(content);
+      if (!parsed || typeof parsed !== "object") {
+        return { ok: false as const, error: "A IA não conseguiu estruturar este documento. Tente um arquivo mais legível." };
+      }
+      payload = parsed as Record<string, unknown>;
     }
 
-    const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const content = json.choices?.[0]?.message?.content ?? "";
-    const parsed = safeParseJson(content);
-    if (!parsed || typeof parsed !== "object") {
-      return { ok: false as const, error: "A IA não conseguiu estruturar este documento. Tente um arquivo mais legível." };
-    }
 
-    const payload = parsed as Record<string, unknown>;
     const summary = buildHumanSummary(data.kind, payload);
 
     const insert = await supabase
