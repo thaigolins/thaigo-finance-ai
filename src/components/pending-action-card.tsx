@@ -21,6 +21,7 @@ import {
   discardPendingAction,
   checkDuplicate,
 } from "@/server/document-extraction.functions";
+import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -178,7 +179,10 @@ export function PendingActionCard({
     if (done) return;
     (async () => {
       try {
-        const r = await dupFn({ data: { pendingId: action.pendingId } });
+        const { data: sessData } = await supabase.auth.getSession();
+        const token = sessData.session?.access_token ?? "";
+        if (!token) return;
+        const r = await dupFn({ data: { token, pendingId: action.pendingId } });
         if (!cancelled && r.ok) {
           setDuplicates(r.duplicates.map((d) => ({ reason: d.reason })));
           setDupChecked(true);
@@ -259,8 +263,11 @@ export function PendingActionCard({
       if (hasTxs && txs.length > 0 && !allSelected) {
         selectedIndices = Array.from(selectedTx).sort((a, b) => a - b);
       }
+      const { data: sessData } = await supabase.auth.getSession();
+      const token = sessData.session?.access_token ?? "";
       const r = await confirmFn({
         data: {
+          token,
           pendingId: action.pendingId,
           overrides: Object.keys(ovr).length > 0 ? ovr : undefined,
           selectedTxIndices: selectedIndices,
@@ -284,7 +291,9 @@ export function PendingActionCard({
   const handleDiscard = async () => {
     setBusy("discard");
     try {
-      const r = await discardFn({ data: { pendingId: action.pendingId } });
+      const { data: sessData } = await supabase.auth.getSession();
+      const token = sessData.session?.access_token ?? "";
+      const r = await discardFn({ data: { token, pendingId: action.pendingId } });
       if (r.ok) {
         toast.message("Sugestão descartada");
         setDone("discarded");
