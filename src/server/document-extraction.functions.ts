@@ -1,8 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { extractTextFromPdfBytes } from "./pdf-text-extractor.server";
-import { parseFgtsEntries } from "./fgts-parser.server";
 
 // Auth manual via token passado no input (mesmo padrão usado em startImport).
 // Retorna { supabase, userId } ou um erro pronto para devolver ao cliente.
@@ -443,49 +441,70 @@ export const extractDocument = createServerFn({ method: "POST" })
         console.error("[extractDocument] FGTS header error:", e);
       }
 
-      // Etapa 2: entries via PDF text + parser determinístico
+      // Etapa 2: entries via Gemini com PDF como documento nativo
+      // Gemini suporta PDFs nativamente via tipo "document" (não image_url)
       let fgtsEntries: unknown[] = [];
 
-      if (data.mime === "application/pdf") {
-        try {
-          const pdfText = await extractTextFromPdfBytes(bytes);
-          console.log("[extractDocument] FGTS PDF text length:", pdfText.length, "preview:", pdfText.slice(0, 300));
-          if (pdfText.length > 50) {
-            const parsed = parseFgtsEntries(pdfText);
-            fgtsEntries = parsed;
-          }
-        } catch (e) {
-          console.error("[extractDocument] FGTS PDF parse error:", e);
-        }
-      }
+      try {
+        const pdfEntriesMessages = [
+          {
+            role: "system",
+            content: "Você é um especialista em extratos FGTS brasileiros. Extraia TODOS os lançamentos da tabela do documento.",
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Extraia TODOS os lançamentos deste extrato FGTS e retorne APENAS este JSON sem markdown:
 
-      // Etapa 3: fallback Gemini OCR se ainda sem entries
-      if (fgtsEntries.length === 0) {
-        console.log("[extractDocument] FGTS: Gemini OCR fallback para entries");
-        try {
-          const entriesMessages = buildEntriesMessages(base64, data.mime, data.filename);
-          const entriesRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-pro",
-              messages: entriesMessages,
-              temperature: 0.1,
-              max_tokens: 16000,
-            }),
-          });
-          if (entriesRes.ok) {
-            const ej = (await entriesRes.json()) as { choices?: { message?: { content?: string } }[] };
-            const ec = ej.choices?.[0]?.message?.content ?? "";
-            const ep = (safeParseJson(ec) as Record<string, unknown> | null) ?? {};
-            const arr = (ep as { entries?: unknown }).entries;
-            fgtsEntries = Array.isArray(arr) ? (arr as unknown[]) : [];
-          } else {
-            console.error("[extractDocument] FGTS Gemini entries gateway error", entriesRes.status);
-          }
-        } catch (e) {
-          console.error("[extractDocument] FGTS Gemini entries error:", e);
+{"entries": [{"occurred_at": "YYYY-MM-DD", "entry_type": "deposito|jam|saque|outro", "amount": 0.00, "notes": "descrição"}]}
+
+Regras:
+- occurred_at: data da coluna DATA formato YYYY-MM-DD
+- entry_type: "deposito" para 115-DEPOSITO, "jam" para CREDITO DE JAM/AC CRED/AC AUT/REGULARIZACAO, "saque" para SAQUE DEP/SAQUE JAM
+- amount: valor POSITIVO da coluna VALOR
+- notes: texto da coluna LANÇAMENTO
+- Inclua TODOS os lançamentos sem exceção, do primeiro ao último`,
+              },
+              data.mime === "application/pdf"
+                ? {
+                    type: "document" as any,
+                    source: {
+                      type: "base64",
+                      media_type: "application/pdf",
+                      data: base64,
+                    },
+                  }
+                : {
+                    type: "image_url",
+                    image_url: { url: `data:${data.mime};base64,${base64}` },
+                  },
+            ],
+          },
+        ];
+        const entriesRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-pro",
+            messages: pdfEntriesMessages,
+            temperature: 0.1,
+            max_tokens: 16000,
+          }),
+        });
+        if (entriesRes.ok) {
+          const ej = await entriesRes.json() as { choices?: { message?: { content?: string } }[] };
+          const ec = ej.choices?.[0]?.message?.content ?? "";
+          console.log("[extractDocument] FGTS entries raw:", ec.slice(0, 500));
+          const ep = (safeParseJson(ec) as Record<string, unknown>) ?? {};
+          const arr = (ep as { entries?: unknown }).entries;
+          fgtsEntries = Array.isArray(arr) ? arr : [];
+        } else {
+          console.error("[extractDocument] FGTS entries error:", entriesRes.status);
         }
+      } catch (e) {
+        console.error("[extractDocument] FGTS entries error:", e);
       }
 
       console.log("[extractDocument] FGTS FINAL entries:", fgtsEntries.length);
