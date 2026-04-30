@@ -441,67 +441,86 @@ export const extractDocument = createServerFn({ method: "POST" })
         console.error("[extractDocument] FGTS header error:", e);
       }
 
-      // Etapa 2: entries via Gemini com PDF como documento nativo
-      // Gemini suporta PDFs nativamente via tipo "document" (não image_url)
+      // Etapa 2: entries via Anthropic Claude (lê PDFs nativamente com precisão)
       let fgtsEntries: unknown[] = [];
-
       try {
-        const pdfEntriesMessages = [
-          {
-            role: "system",
-            content: "Você é um especialista em extratos FGTS brasileiros. Extraia TODOS os lançamentos da tabela do documento.",
+        const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
           },
-          {
-            role: "user",
-            content: [
+          body: JSON.stringify({
+            model: "claude-opus-4-5",
+            max_tokens: 16000,
+            messages: [
               {
-                type: "text",
-                text: `Extraia TODOS os lançamentos deste extrato FGTS e retorne APENAS este JSON sem markdown:
-
-{"entries": [{"occurred_at": "YYYY-MM-DD", "entry_type": "deposito|jam|saque|outro", "amount": 0.00, "notes": "descrição"}]}
-
-Regras:
-- occurred_at: data da coluna DATA formato YYYY-MM-DD
-- entry_type: "deposito" para 115-DEPOSITO, "jam" para CREDITO DE JAM/AC CRED/AC AUT/REGULARIZACAO, "saque" para SAQUE DEP/SAQUE JAM
-- amount: valor POSITIVO da coluna VALOR
-- notes: texto da coluna LANÇAMENTO
-- Inclua TODOS os lançamentos sem exceção, do primeiro ao último`,
-              },
-              data.mime === "application/pdf"
-                ? {
-                    type: "document" as any,
+                role: "user",
+                content: [
+                  {
+                    type: "document",
                     source: {
                       type: "base64",
                       media_type: "application/pdf",
                       data: base64,
                     },
-                  }
-                : {
-                    type: "image_url",
-                    image_url: { url: `data:${data.mime};base64,${base64}` },
                   },
+                  {
+                    type: "text",
+                    text: `Extraia TODOS os lançamentos desta tabela de extrato FGTS.
+Retorne APENAS este JSON sem markdown, sem texto adicional:
+{"entries": [{"occurred_at": "YYYY-MM-DD", "entry_type": "deposito|jam|saque|outro", "amount": 0.00, "notes": "descrição do lançamento"}]}
+
+Regras CRÍTICAS:
+- Extraia ABSOLUTAMENTE TODOS os lançamentos, do primeiro ao último (são ~209 linhas)
+- occurred_at: data da coluna DATA no formato YYYY-MM-DD
+- entry_type:
+  "deposito" → linhas com 115-DEPOSITO
+  "jam" → linhas com CREDITO DE JAM, AC CRED DIST, AC AUT JAM, REGULARIZACAO CREDITO, AC REPOSICAO
+  "saque" → linhas com SAQUE DEP, SAQUE JAM
+  "outro" → demais
+- amount: valor POSITIVO da coluna VALOR (use Math.abs, ignore negativos)
+- notes: texto exato da coluna LANÇAMENTO
+- Ignore a linha "SALDO ANTERIOR"
+- NÃO omita nenhuma linha da tabela`,
+                  },
+                ],
+              },
             ],
-          },
-        ];
-        const entriesRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-pro",
-            messages: pdfEntriesMessages,
-            temperature: 0.1,
-            max_tokens: 16000,
           }),
         });
-        if (entriesRes.ok) {
-          const ej = await entriesRes.json() as { choices?: { message?: { content?: string } }[] };
-          const ec = ej.choices?.[0]?.message?.content ?? "";
-          console.log("[extractDocument] FGTS entries raw:", ec.slice(0, 500));
-          const ep = (safeParseJson(ec) as Record<string, unknown>) ?? {};
-          const arr = (ep as { entries?: unknown }).entries;
+
+        if (anthropicRes.ok) {
+          const aj = await anthropicRes.json() as { content?: Array<{ type: string; text?: string }> };
+          const ac = aj.content?.find(c => c.type === "text")?.text ?? "";
+          console.log("[extractDocument] FGTS Anthropic entries raw:", ac.slice(0, 300));
+          const ap = (safeParseJson(ac) as Record<string, unknown>) ?? {};
+          const arr = (ap as { entries?: unknown }).entries;
           fgtsEntries = Array.isArray(arr) ? arr : [];
+          console.log("[extractDocument] FGTS Anthropic entries count:", fgtsEntries.length);
         } else {
-          console.error("[extractDocument] FGTS entries error:", entriesRes.status);
+          const errText = await anthropicRes.text();
+          console.error("[extractDocument] FGTS Anthropic error:", anthropicRes.status, errText.slice(0, 200));
+
+          // Fallback para Gemini Pro se Anthropic falhar
+          const entriesRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-pro",
+              messages: buildEntriesMessages(base64, data.mime, data.filename),
+              temperature: 0.1,
+              max_tokens: 16000,
+            }),
+          });
+          if (entriesRes.ok) {
+            const ej = await entriesRes.json() as { choices?: { message?: { content?: string } }[] };
+            const ec = ej.choices?.[0]?.message?.content ?? "";
+            const ep = (safeParseJson(ec) as Record<string, unknown>) ?? {};
+            const arr2 = (ep as { entries?: unknown }).entries;
+            fgtsEntries = Array.isArray(arr2) ? arr2 : [];
+          }
         }
       } catch (e) {
         console.error("[extractDocument] FGTS entries error:", e);
