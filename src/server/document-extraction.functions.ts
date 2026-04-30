@@ -1,6 +1,26 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware-custom";
+import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+
+// Auth manual via token passado no input (mesmo padrão usado em startImport).
+// Retorna { supabase, userId } ou um erro pronto para devolver ao cliente.
+async function authWithToken(token: string): Promise<
+  | { ok: true; supabase: any; userId: string }
+  | { ok: false; error: string }
+> {
+  const SUPABASE_URL = process.env.SUPABASE_URL!;
+  const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase: any = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+  });
+  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !userData?.user) {
+    return { ok: false, error: "Sessão inválida. Faça login novamente." };
+  }
+  return { ok: true, supabase, userId: userData.user.id as string };
+}
 
 // ============================================================
 // Document extraction — leitura de PDFs/imagens via Lovable AI Gateway
@@ -17,6 +37,7 @@ const KindSchema = z.enum([
 ]);
 
 const ExtractInput = z.object({
+  token: z.string().min(1),
   bucket: z.enum([
     "invoices",
     "bank-statements",
@@ -222,12 +243,11 @@ async function logAudit(supabase: any, params: {
 }
 
 export const extractDocument = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d) => ExtractInput.parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase: sbTyped, userId } = context;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = sbTyped as any;
+  .handler(async ({ data }) => {
+    const auth = await authWithToken(data.token);
+    if (!auth.ok) return { ok: false as const, error: auth.error };
+    const { supabase, userId } = auth;
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) {
       return { ok: false as const, error: "LOVABLE_API_KEY ausente. Configure o gateway de IA." };
@@ -333,17 +353,17 @@ export const extractDocument = createServerFn({ method: "POST" })
 // ============================================================
 
 const DuplicateInput = z.object({
+  token: z.string().min(1),
   pendingId: z.string().uuid(),
   overrides: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const checkDuplicate = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d) => DuplicateInput.parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase: sbTyped, userId } = context;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = sbTyped as any;
+  .handler(async ({ data }) => {
+    const auth = await authWithToken(data.token);
+    if (!auth.ok) return { ok: false as const, error: auth.error, duplicates: [] as { reason: string }[] };
+    const { supabase, userId } = auth;
 
     const { data: pending } = await supabase
       .from("pending_ai_actions")
@@ -465,6 +485,7 @@ export const checkDuplicate = createServerFn({ method: "POST" })
 // ============================================================
 
 const ConfirmInput = z.object({
+  token: z.string().min(1),
   pendingId: z.string().uuid(),
   overrides: z.record(z.string(), z.unknown()).optional(),
   selectedTxIndices: z.array(z.number().int().min(0)).optional(),
@@ -478,12 +499,11 @@ const num = (v: unknown, d = 0) => {
 const str = (v: unknown, d = "") => (typeof v === "string" ? v : d);
 
 export const confirmPendingAction = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
   .inputValidator((d) => ConfirmInput.parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase: sbTyped, userId } = context;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = sbTyped as any;
+  .handler(async ({ data }) => {
+    const auth = await authWithToken(data.token);
+    if (!auth.ok) return { ok: false as const, error: auth.error };
+    const { supabase, userId } = auth;
 
     const { data: pending, error: pErr } = await supabase
       .from("pending_ai_actions").select("*").eq("id", data.pendingId).eq("user_id", userId).maybeSingle();
@@ -664,12 +684,13 @@ export const confirmPendingAction = createServerFn({ method: "POST" })
   });
 
 export const discardPendingAction = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ pendingId: z.string().uuid() }).parse(d))
-  .handler(async ({ data, context }) => {
-    const { supabase: sbTyped, userId } = context;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = sbTyped as any;
+  .inputValidator((d) =>
+    z.object({ token: z.string().min(1), pendingId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const auth = await authWithToken(data.token);
+    if (!auth.ok) return { ok: false as const, error: auth.error };
+    const { supabase, userId } = auth;
     const { data: pending } = await supabase
       .from("pending_ai_actions").select("kind, payload").eq("id", data.pendingId).eq("user_id", userId).maybeSingle();
     const { error } = await supabase
