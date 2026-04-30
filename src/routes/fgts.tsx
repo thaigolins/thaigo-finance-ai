@@ -868,6 +868,7 @@ function FgtsPage() {
                               → {getFgtsCodeMeaning(e.notes ?? "")}
                             </p>
                           )}
+                        </div>
                         <p
                           className={cn(
                             "num shrink-0 text-sm font-semibold tabular-nums",
