@@ -131,38 +131,8 @@ function FinanceiroPage() {
         <section>
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Contas bancárias</h3>
-            <FormDialog<AccountForm>
-              title="Nova conta bancária"
-              description="Cadastre uma conta para começar a controlar saldos e movimentações."
+            <BankPickerDialog
               trigger={accountTrigger}
-              schema={accountSchema}
-              defaultValues={{
-                bank: "",
-                account_type: "checking",
-                branch: "",
-                account_number: "",
-                balance: 0,
-                color: "#689F7A",
-              }}
-              fields={[
-                { name: "bank", label: "Banco", type: "text", placeholder: "Itaú, Nubank, BTG..." },
-                {
-                  name: "account_type",
-                  label: "Tipo",
-                  type: "select",
-                  options: [
-                    { value: "checking", label: "Conta Corrente" },
-                    { value: "savings", label: "Poupança" },
-                    { value: "investment", label: "Investimentos" },
-                    { value: "wallet", label: "Carteira Digital" },
-                    { value: "other", label: "Outros" },
-                  ],
-                },
-                { name: "branch", label: "Agência", type: "text" },
-                { name: "account_number", label: "Conta", type: "text" },
-                { name: "balance", label: "Saldo inicial", type: "number", step: "0.01" },
-                { name: "color", label: "Cor", type: "color" },
-              ]}
               onSubmit={async (v) => {
                 await insertAccount.mutateAsync({
                   bank: v.bank,
@@ -170,7 +140,9 @@ function FinanceiroPage() {
                   branch: v.branch || null,
                   account_number: v.account_number || null,
                   balance: v.balance,
-                  color: v.color || null,
+                  color: v.color,
+                  bank_color: v.bank_color,
+                  bank_logo: v.bank_logo,
                 });
               }}
             />
@@ -188,40 +160,44 @@ function FinanceiroPage() {
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {accounts.map((a) => (
-                <div
-                  key={a.id}
-                  className="group relative rounded-2xl border border-border/60 bg-card p-5 shadow-card transition hover:border-primary/30"
-                >
-                  <button
-                    onClick={() => removeAccount.mutate(a.id)}
-                    className="absolute right-3 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                    aria-label="Remover conta"
+              {accounts.map((a) => {
+                const bankDef = findBank(a.bank);
+                const color = a.bank_color ?? bankDef?.color ?? a.color ?? "#689F7A";
+                const logo = a.bank_logo ?? bankDef?.logo ?? null;
+                return (
+                  <div
+                    key={a.id}
+                    style={{
+                      borderLeft: `4px solid ${color}`,
+                      background: `linear-gradient(135deg, ${color}0D 0%, transparent 70%)`,
+                    }}
+                    className="group relative rounded-2xl border border-border/60 p-5 shadow-card transition hover:border-primary/30"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                  <div className="flex items-center justify-between">
-                    <div
-                      className="flex h-10 w-10 items-center justify-center rounded-xl text-white"
-                      style={{ background: a.color ?? "#689F7A" }}
+                    <button
+                      onClick={() => removeAccount.mutate(a.id)}
+                      className="absolute right-3 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                      aria-label="Remover conta"
                     >
-                      <Building2 className="h-5 w-5" />
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                    <div className="flex items-center justify-between">
+                      <BankLogo name={a.bank} logo={logo} color={color} size={40} />
+                      <Badge variant="outline" className="border-border/60 text-xs">
+                        {accountTypeLabels[a.account_type]}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="border-border/60 text-xs">
-                      {accountTypeLabels[a.account_type]}
-                    </Badge>
+                    <p className="mt-4 text-sm font-medium">{a.bank}</p>
+                    <p className="mt-1 text-2xl font-semibold tracking-tight">{formatBRL(Number(a.balance))}</p>
+                    {(a.branch || a.account_number) && (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {a.branch && `Ag. ${a.branch}`}
+                        {a.branch && a.account_number && " · "}
+                        {a.account_number && `Cc. ${a.account_number}`}
+                      </p>
+                    )}
                   </div>
-                  <p className="mt-4 text-sm font-medium">{a.bank}</p>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight">{formatBRL(Number(a.balance))}</p>
-                  {(a.branch || a.account_number) && (
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {a.branch && `Ag. ${a.branch}`}
-                      {a.branch && a.account_number && " · "}
-                      {a.account_number && `Cc. ${a.account_number}`}
-                    </p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
