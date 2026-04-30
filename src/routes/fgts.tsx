@@ -347,50 +347,6 @@ function FgtsPage() {
     }
   };
 
-  const newDialog = (
-    <FormDialog<Form>
-      title="Nova conta FGTS"
-      description="Cadastre um vínculo empregatício"
-      trigger={
-        <Button className="w-full rounded-xl" variant="outline">
-          <Plus className="mr-1.5 h-4 w-4" /> Nova conta FGTS
-        </Button>
-      }
-      schema={schema}
-      defaultValues={{
-        employer: "",
-        cnpj: "",
-        status: "ativa",
-        balance: 0,
-        monthly_deposit: 0,
-        jam_month: 0,
-        last_movement: new Date().toISOString().slice(0, 10),
-      }}
-      fields={[
-        { name: "employer", label: "Empregador", type: "text", placeholder: "Razão social" },
-        { name: "cnpj", label: "CNPJ", type: "text", placeholder: "00.000.000/0000-00" },
-        {
-          name: "status",
-          label: "Status",
-          type: "select",
-          options: [
-            { value: "ativa", label: "Ativa" },
-            { value: "inativa", label: "Inativa" },
-          ],
-        },
-        { name: "balance", label: "Saldo (R$)", type: "number", step: "0.01" },
-        { name: "monthly_deposit", label: "Depósito mensal (R$)", type: "number", step: "0.01" },
-        { name: "jam_month", label: "JAM do mês (R$)", type: "number", step: "0.01" },
-        { name: "last_movement", label: "Última movimentação", type: "date" },
-      ]}
-      onSubmit={async (v) => {
-        const payload: Record<string, unknown> = { ...v };
-        if (!payload.cnpj) payload.cnpj = null;
-        if (!payload.last_movement) payload.last_movement = null;
-        await insert.mutateAsync(payload);
-      }}
-    />
-  );
 
   const maxAccountBalance = Math.max(1, ...accounts.map((a) => Number(a.balance)));
 
