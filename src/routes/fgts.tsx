@@ -7,22 +7,33 @@ import {
   Building2,
   Sparkles,
   Shield,
-  AlertTriangle,
   TrendingUp,
   CalendarClock,
   FileText,
   Trash2,
   Loader2,
   Download,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Circle,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  PiggyBank,
+  Calendar,
+  BarChart3,
 } from "lucide-react";
 import {
-  AreaChart,
+  ComposedChart,
   Area,
+  Bar,
+  Line,
   ResponsiveContainer,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
+  ReferenceLine,
 } from "recharts";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -30,6 +41,8 @@ import { AppHeader } from "@/components/app-header";
 import { StatCard } from "@/components/stat-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/empty-state";
 import { FormDialog } from "@/components/form-dialog";
 import { formatBRL } from "@/lib/format";
@@ -59,21 +72,65 @@ type FgtsAccount = {
   jam_month: number;
   last_movement: string | null;
   statement_path: string | null;
+  created_at?: string | null;
 };
 
+type EntryType = "deposito" | "jam" | "saque" | "outro";
 type FgtsEntry = {
   id: string;
   fgts_account_id: string;
   amount: number;
   occurred_at: string;
-  entry_type: "deposito" | "saque" | "rendimento" | "ajuste";
+  entry_type: EntryType;
+  notes: string | null;
 };
 
-function isStale(date: string | null) {
-  if (!date) return true;
-  const diff = (Date.now() - new Date(date).getTime()) / (1000 * 60 * 60 * 24);
-  return diff > 90;
+const MONTH_NAMES_SHORT = [
+  "jan",
+  "fev",
+  "mar",
+  "abr",
+  "mai",
+  "jun",
+  "jul",
+  "ago",
+  "set",
+  "out",
+  "nov",
+  "dez",
+];
+
+function formatDatePT(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso + (iso.length === 10 ? "T00:00:00" : ""));
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${String(d.getDate()).padStart(2, "0")} ${MONTH_NAMES_SHORT[d.getMonth()]} ${d.getFullYear()}`;
 }
+
+function diffYearsMonths(from: string | null): string | null {
+  if (!from) return null;
+  const start = new Date(from + (from.length === 10 ? "T00:00:00" : ""));
+  if (Number.isNaN(start.getTime())) return null;
+  const now = new Date();
+  let years = now.getFullYear() - start.getFullYear();
+  let months = now.getMonth() - start.getMonth();
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  if (years <= 0 && months <= 0) return "menos de 1 mês";
+  const parts: string[] = [];
+  if (years > 0) parts.push(`${years} ${years === 1 ? "ano" : "anos"}`);
+  if (months > 0) parts.push(`${months} ${months === 1 ? "mês" : "meses"}`);
+  return parts.join(" e ");
+}
+
+const entryMeta: Record<EntryType, { label: string; color: string; icon: typeof Circle; sign: 1 | -1 }> = {
+  deposito: { label: "Depósito", color: "text-success", icon: ArrowDownLeft, sign: 1 },
+  jam: { label: "JAM", color: "text-warning", icon: Sparkles, sign: 1 },
+  saque: { label: "Saque", color: "text-destructive", icon: ArrowUpRight, sign: -1 },
+  outro: { label: "Ajuste", color: "text-muted-foreground", icon: Circle, sign: 1 },
+};
 
 const schema = z.object({
   employer: z.string().min(1, "Empregador obrigatório"),
@@ -86,11 +143,18 @@ const schema = z.object({
 });
 type Form = z.infer<typeof schema>;
 
+const PAGE_SIZE = 20;
+
 function FgtsPage() {
   const { user } = useAuth();
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Filtros do histórico
+  const [filterType, setFilterType] = useState<"all" | EntryType>("all");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const { data: accounts = [], isLoading } = useUserList<FgtsAccount>("fgts_accounts", {
     orderBy: "balance",
@@ -103,38 +167,125 @@ function FgtsPage() {
   const remove = useUserDelete("fgts_accounts");
   const insertFile = useUserInsert<Record<string, unknown>>("uploaded_files");
 
+  // Totalizadores agregados
   const total = accounts.reduce((s, a) => s + Number(a.balance), 0);
   const monthlyDeposit = accounts.reduce((s, a) => s + Number(a.monthly_deposit), 0);
-  const totalJam = accounts.reduce((s, a) => s + Number(a.jam_month), 0);
-  const stale = accounts.filter((a) => isStale(a.last_movement)).length;
-  const totalWithdrawals = entries
-    .filter((e) => e.entry_type === "saque")
-    .reduce((s, e) => s + Number(e.amount), 0);
+  const totalJamMonth = accounts.reduce((s, a) => s + Number(a.jam_month), 0);
 
-  // Histórico de evolução: últimos 6 meses, baseado em entries reais
-  const history = useMemo(() => {
+  const totals = useMemo(() => {
+    let dep = 0;
+    let jam = 0;
+    let saq = 0;
+    for (const e of entries) {
+      const v = Number(e.amount);
+      if (e.entry_type === "deposito") dep += v;
+      else if (e.entry_type === "jam") jam += v;
+      else if (e.entry_type === "saque") saq += v;
+    }
+    return { dep, jam, saq };
+  }, [entries]);
+
+  // Última movimentação global
+  const lastMovementGlobal = useMemo(() => {
+    const dates = accounts
+      .map((a) => a.last_movement)
+      .filter((d): d is string => !!d)
+      .sort()
+      .reverse();
+    return dates[0] ?? null;
+  }, [accounts]);
+
+  // Valor rescisório estimado: 40% multa + saldo
+  const valorRescisorio = total * 1.4;
+
+  // Análise FGTS — projeção
+  const firstMovement = useMemo(() => {
+    if (entries.length === 0) return null;
+    return entries[0].occurred_at;
+  }, [entries]);
+
+  const tempoContribuicao = diffYearsMonths(firstMovement);
+  const monthsContrib = useMemo(() => {
+    if (!firstMovement) return 0;
+    const d = new Date(firstMovement + (firstMovement.length === 10 ? "T00:00:00" : ""));
     const now = new Date();
-    const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-    const buckets: { month: string; balance: number }[] = [];
-    let running = 0;
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const monthEntries = entries.filter((e) => e.occurred_at.startsWith(key));
-      monthEntries.forEach((e) => {
-        running += e.entry_type === "saque" ? -Number(e.amount) : Number(e.amount);
+    return Math.max(
+      1,
+      (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth()) + 1,
+    );
+  }, [firstMovement]);
+
+  const mediaDeposito = monthsContrib > 0 ? totals.dep / monthsContrib : 0;
+  const projecao12m = total + monthlyDeposit * 12 + totalJamMonth * 12;
+
+  // Histórico por mês: depósito, jam, saque, saldo acumulado
+  const chartData = useMemo(() => {
+    if (entries.length === 0 && total === 0) return [];
+    const buckets = new Map<
+      string,
+      { key: string; label: string; deposito: number; jam: number; saque: number; balance: number }
+    >();
+
+    // Pega janela: do primeiro entry até hoje, ou últimos 12 meses
+    const start =
+      entries.length > 0
+        ? new Date(entries[0].occurred_at + "T00:00:00")
+        : new Date(new Date().getFullYear(), new Date().getMonth() - 11, 1);
+    const end = new Date();
+    const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+    while (cur <= end) {
+      const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`;
+      buckets.set(key, {
+        key,
+        label: `${MONTH_NAMES_SHORT[cur.getMonth()]}/${String(cur.getFullYear()).slice(2)}`,
+        deposito: 0,
+        jam: 0,
+        saque: 0,
+        balance: 0,
       });
-      buckets.push({ month: months[d.getMonth()], balance: running });
+      cur.setMonth(cur.getMonth() + 1);
     }
-    // Se não houver entries, mostra valor atual nos últimos meses
-    if (entries.length === 0 && total > 0) {
-      return buckets.map((b, i) => ({
-        ...b,
-        balance: total * (0.85 + 0.03 * i),
-      }));
+    for (const e of entries) {
+      const key = e.occurred_at.slice(0, 7);
+      const b = buckets.get(key);
+      if (!b) continue;
+      const v = Number(e.amount);
+      if (e.entry_type === "deposito") b.deposito += v;
+      else if (e.entry_type === "jam") b.jam += v;
+      else if (e.entry_type === "saque") b.saque += v;
     }
-    return buckets;
+    let running = 0;
+    const arr = Array.from(buckets.values());
+    for (const b of arr) {
+      running += b.deposito + b.jam - b.saque;
+      b.balance = running;
+    }
+    // Limita a 12 meses recentes
+    return arr.slice(-12);
   }, [entries, total]);
+
+  const withdrawalMonths = useMemo(
+    () => chartData.filter((d) => d.saque > 0).map((d) => d.label),
+    [chartData],
+  );
+
+  // Histórico filtrado
+  const filtered = useMemo(() => {
+    const sorted = [...entries].sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1));
+    return sorted.filter((e) => {
+      if (filterType !== "all" && e.entry_type !== filterType) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const hay = `${e.notes ?? ""} ${e.occurred_at} ${entryMeta[e.entry_type].label}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [entries, filterType, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageItems = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const handleFiles = async (list: FileList | null) => {
     if (!list || !user?.id) return;
@@ -215,11 +366,14 @@ function FgtsPage() {
     />
   );
 
+  const maxAccountBalance = Math.max(1, ...accounts.map((a) => Number(a.balance)));
+
   return (
     <>
       <AppHeader title="FGTS" subtitle="Saldo, contas e evolução por empregador" exportModule="FGTS" />
       <main className="flex-1 space-y-8 p-4 md:p-8">
-        <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {/* 6 Cards de estatísticas */}
+        <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <StatCard label="Saldo Total FGTS" value={formatBRL(total)} icon={Banknote} accent="primary" />
           <StatCard
             label="Depósito Mensal"
@@ -227,12 +381,29 @@ function FgtsPage() {
             icon={TrendingUp}
             accent="success"
           />
-          <StatCard label="JAM Acumulado (mês)" value={formatBRL(totalJam)} icon={Sparkles} accent="primary" />
           <StatCard
-            label="Extratos desatualizados"
-            value={`${stale}`}
-            icon={AlertTriangle}
-            accent={stale > 0 ? "warning" : "muted"}
+            label="JAM Acumulado (mês)"
+            value={formatBRL(totalJamMonth)}
+            icon={Sparkles}
+            accent="warning"
+          />
+          <StatCard
+            label="Total em Saques"
+            value={formatBRL(totals.saq)}
+            icon={ArrowUpRight}
+            accent="destructive"
+          />
+          <StatCard
+            label="Valor Rescisório"
+            value={formatBRL(valorRescisorio)}
+            icon={Shield}
+            accent="primary"
+          />
+          <StatCard
+            label="Última Atualização"
+            value={lastMovementGlobal ? formatDatePT(lastMovementGlobal) : "—"}
+            icon={CalendarClock}
+            accent="muted"
           />
         </section>
 
@@ -326,62 +497,139 @@ function FgtsPage() {
           />
         ) : (
           <>
-            {/* Evolução do saldo */}
+            {/* Gráfico melhorado */}
             <section className="rounded-2xl border border-border/40 bg-card p-6 shadow-card">
               <div className="mb-5 flex items-end justify-between">
                 <div>
                   <h2 className="text-base font-semibold tracking-tight">
                     Evolução do saldo consolidado
                   </h2>
-                  <p className="text-xs text-muted-foreground">Últimos 6 meses · todas as contas</p>
+                  <p className="text-xs text-muted-foreground">
+                    Saldo acumulado, depósitos mensais e marcadores de saque
+                  </p>
                 </div>
                 <p className="num text-sm font-semibold text-primary">{formatBRL(total)}</p>
               </div>
-              <div className="h-60">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={history} margin={{ left: -10, right: 8, top: 8 }}>
-                    <defs>
-                      <linearGradient id="fgtsGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="oklch(0.68 0.11 158)" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="oklch(0.68 0.11 158)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="2 4" stroke="oklch(0.3 0.01 200)" vertical={false} />
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fill: "oklch(0.6 0.02 200)", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fill: "oklch(0.6 0.02 200)", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
-                    />
-                    <Tooltip
-                      cursor={{
-                        stroke: "oklch(0.68 0.11 158)",
-                        strokeWidth: 1,
-                        strokeDasharray: "3 3",
-                      }}
-                      contentStyle={{
-                        background: "oklch(0.18 0.01 200)",
-                        border: "1px solid oklch(0.3 0.01 200)",
-                        borderRadius: 12,
-                        fontSize: 12,
-                      }}
-                      formatter={(v: number) => formatBRL(v)}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="balance"
-                      stroke="oklch(0.68 0.11 158)"
-                      strokeWidth={2}
-                      fill="url(#fgtsGrad)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+              {chartData.length === 0 ? (
+                <div className="flex h-60 items-center justify-center text-xs text-muted-foreground">
+                  Sem lançamentos registrados ainda.
+                </div>
+              ) : (
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={chartData} margin={{ left: -10, right: 8, top: 8 }}>
+                      <defs>
+                        <linearGradient id="fgtsGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="oklch(0.68 0.11 158)" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="oklch(0.68 0.11 158)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="2 4" stroke="oklch(0.3 0.01 200)" vertical={false} />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fill: "oklch(0.6 0.02 200)", fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fill: "oklch(0.6 0.02 200)", fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                      />
+                      <Tooltip
+                        cursor={{
+                          stroke: "oklch(0.68 0.11 158)",
+                          strokeWidth: 1,
+                          strokeDasharray: "3 3",
+                        }}
+                        contentStyle={{
+                          background: "oklch(0.18 0.01 200)",
+                          border: "1px solid oklch(0.3 0.01 200)",
+                          borderRadius: 12,
+                          fontSize: 12,
+                        }}
+                        formatter={(v: number, name: string) => {
+                          const labels: Record<string, string> = {
+                            balance: "Saldo",
+                            deposito: "Depósito",
+                            jam: "JAM",
+                            saque: "Saque",
+                          };
+                          return [formatBRL(v), labels[name] ?? name];
+                        }}
+                      />
+                      {withdrawalMonths.map((m) => (
+                        <ReferenceLine
+                          key={m}
+                          x={m}
+                          stroke="oklch(0.6 0.2 25)"
+                          strokeDasharray="4 3"
+                          strokeWidth={1.2}
+                        />
+                      ))}
+                      <Area
+                        type="monotone"
+                        dataKey="balance"
+                        stroke="oklch(0.68 0.11 158)"
+                        strokeWidth={2}
+                        fill="url(#fgtsGrad)"
+                      />
+                      <Bar dataKey="deposito" fill="oklch(0.65 0.13 158)" radius={[4, 4, 0, 0]} barSize={14} />
+                      <Line
+                        type="monotone"
+                        dataKey="jam"
+                        stroke="oklch(0.78 0.15 90)"
+                        strokeWidth={1.5}
+                        dot={{ r: 2 }}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </section>
+
+            {/* Análise FGTS */}
+            <section className="rounded-2xl border border-border/40 bg-card p-6 shadow-card">
+              <div className="mb-5 flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-primary" />
+                <h2 className="text-base font-semibold tracking-tight">Análise do FGTS</h2>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <AnalysisItem
+                  icon={Calendar}
+                  label="Tempo de contribuição"
+                  value={tempoContribuicao ?? "—"}
+                />
+                <AnalysisItem
+                  icon={TrendingUp}
+                  label="Média de depósito mensal"
+                  value={formatBRL(mediaDeposito)}
+                />
+                <AnalysisItem
+                  icon={ArrowDownLeft}
+                  label="Total depositado pelo empregador"
+                  value={formatBRL(totals.dep)}
+                  accent="text-success"
+                />
+                <AnalysisItem
+                  icon={Sparkles}
+                  label="Total de JAM recebido"
+                  value={formatBRL(totals.jam)}
+                  accent="text-warning"
+                />
+                <AnalysisItem
+                  icon={ArrowUpRight}
+                  label="Total sacado"
+                  value={formatBRL(totals.saq)}
+                  accent="text-destructive"
+                />
+                <AnalysisItem
+                  icon={PiggyBank}
+                  label="Projeção em 12 meses"
+                  value={formatBRL(projecao12m)}
+                  accent="text-primary"
+                />
               </div>
             </section>
 
@@ -391,15 +639,20 @@ function FgtsPage() {
                 <h2 className="text-base font-semibold tracking-tight">Contas por empregador</h2>
                 <p className="text-xs text-muted-foreground">
                   {accounts.length} vínculo{accounts.length === 1 ? "" : "s"} ·{" "}
-                  {formatBRL(totalWithdrawals)} em saques registrados
+                  {formatBRL(totals.saq)} em saques registrados
                 </p>
               </div>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {accounts.map((a) => {
-                  const accountWithdrawals = entries
-                    .filter((e) => e.fgts_account_id === a.id && e.entry_type === "saque")
+                  const accountEntries = entries.filter((e) => e.fgts_account_id === a.id);
+                  const accountWithdrawals = accountEntries
+                    .filter((e) => e.entry_type === "saque")
                     .reduce((s, e) => s + Number(e.amount), 0);
-                  const isDated = isStale(a.last_movement);
+                  const admission =
+                    accountEntries[0]?.occurred_at ?? a.created_at ?? null;
+                  const tempo = diffYearsMonths(admission);
+                  const accountRescisorio = Number(a.balance) * 1.4;
+                  const progress = (Number(a.balance) / maxAccountBalance) * 100;
                   return (
                     <div
                       key={a.id}
@@ -419,19 +672,17 @@ function FgtsPage() {
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "shrink-0 rounded-full px-2 py-0 text-[9px] uppercase tracking-wider",
-                              a.status === "ativa"
-                                ? "border-success/30 bg-success/10 text-success"
-                                : "border-border/40 bg-muted/20 text-muted-foreground",
-                            )}
-                          >
-                            {a.status}
-                          </Badge>
-                        </div>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "shrink-0 rounded-full px-2 py-0 text-[9px] uppercase tracking-wider",
+                            a.status === "ativa"
+                              ? "border-success/30 bg-success/10 text-success"
+                              : "border-border/40 bg-muted/20 text-muted-foreground",
+                          )}
+                        >
+                          {a.status}
+                        </Badge>
                       </div>
 
                       <div className="mt-5">
@@ -441,12 +692,13 @@ function FgtsPage() {
                         <p className="num mt-1 text-2xl font-semibold tracking-tight">
                           {formatBRL(Number(a.balance))}
                         </p>
+                        <Progress value={progress} className="mt-2 h-1.5" />
                       </div>
 
-                      <div className="mt-4 grid grid-cols-3 gap-3 border-t border-border/40 pt-4 text-xs">
+                      <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border/40 pt-4 text-xs">
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Depósito
+                            Depósito mensal
                           </p>
                           <p className="num mt-0.5 font-medium">
                             {formatBRL(Number(a.monthly_deposit))}
@@ -454,32 +706,44 @@ function FgtsPage() {
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Saques
+                            JAM mês
                           </p>
-                          <p className="num mt-0.5 font-medium">{formatBRL(accountWithdrawals)}</p>
+                          <p className="num mt-0.5 font-medium text-warning">
+                            {formatBRL(Number(a.jam_month))}
+                          </p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            JAM
+                            Saques
                           </p>
-                          <p className="num mt-0.5 font-medium text-success">
-                            {formatBRL(Number(a.jam_month))}
+                          <p className="num mt-0.5 font-medium text-destructive">
+                            {formatBRL(accountWithdrawals)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            Rescisório (est.)
+                          </p>
+                          <p className="num mt-0.5 font-medium text-primary">
+                            {formatBRL(accountRescisorio)}
                           </p>
                         </div>
                       </div>
 
-                      <div
-                        className={cn(
-                          "mt-4 flex items-center gap-2 rounded-lg border px-3 py-2 text-[11px]",
-                          isDated
-                            ? "border-warning/30 bg-warning/10 text-warning"
-                            : "border-border/40 bg-muted/10 text-muted-foreground",
-                        )}
-                      >
+                      {tempo && (
+                        <div className="mt-3 flex items-center gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2 text-[11px] text-muted-foreground">
+                          <Calendar className="h-3.5 w-3.5" />
+                          <span>
+                            Desde {formatDatePT(admission)} · {tempo}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="mt-2 flex items-center gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2 text-[11px] text-muted-foreground">
                         <CalendarClock className="h-3.5 w-3.5" />
                         <span>
                           {a.last_movement
-                            ? `${isDated ? "Extrato desatualizado · " : "Atualizado em "}${new Date(a.last_movement).toLocaleDateString("pt-BR")}`
+                            ? `Atualizado em ${formatDatePT(a.last_movement)}`
                             : "Sem movimentação registrada"}
                         </span>
                       </div>
@@ -511,9 +775,179 @@ function FgtsPage() {
                 })}
               </div>
             </section>
+
+            {/* Histórico de lançamentos */}
+            <section className="rounded-2xl border border-border/40 bg-card p-6 shadow-card">
+              <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold tracking-tight">
+                    Histórico de lançamentos
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    {filtered.length} lançamento{filtered.length === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <span className="text-success">
+                    Depósitos: <span className="num font-semibold">{formatBRL(totals.dep)}</span>
+                  </span>
+                  <span className="text-warning">
+                    JAM: <span className="num font-semibold">{formatBRL(totals.jam)}</span>
+                  </span>
+                  <span className="text-destructive">
+                    Saques: <span className="num font-semibold">{formatBRL(totals.saq)}</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                {(["all", "deposito", "jam", "saque"] as const).map((t) => (
+                  <Button
+                    key={t}
+                    size="sm"
+                    variant={filterType === t ? "default" : "outline"}
+                    className="rounded-full text-xs"
+                    onClick={() => {
+                      setFilterType(t);
+                      setPage(1);
+                    }}
+                  >
+                    {t === "all"
+                      ? "Todos"
+                      : t === "deposito"
+                        ? "Depósitos"
+                        : t === "jam"
+                          ? "JAM"
+                          : "Saques"}
+                  </Button>
+                ))}
+                <div className="relative ml-auto w-full sm:w-64">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por descrição ou data..."
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPage(1);
+                    }}
+                    className="h-8 rounded-full pl-8 text-xs"
+                  />
+                </div>
+              </div>
+
+              {pageItems.length === 0 ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  Nenhum lançamento encontrado.
+                </div>
+              ) : (
+                <ul className="divide-y divide-border/40">
+                  {pageItems.map((e) => {
+                    const meta = entryMeta[e.entry_type];
+                    const Icon = meta.icon;
+                    const v = Number(e.amount);
+                    // Tenta extrair saldo de notes (formato livre: "saldo: R$ X")
+                    const saldoMatch = e.notes?.match(/saldo[:\s]+r?\$?\s*([\d.,]+)/i);
+                    const saldoApos = saldoMatch ? saldoMatch[1] : null;
+                    return (
+                      <li key={e.id} className="flex items-center gap-4 py-3">
+                        <div
+                          className={cn(
+                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/40 bg-muted/10",
+                            meta.color,
+                          )}
+                        >
+                          <Icon className="h-4 w-4" strokeWidth={1.75} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-medium">
+                              {e.notes || meta.label}
+                            </p>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "shrink-0 rounded-full px-2 py-0 text-[9px] uppercase tracking-wider",
+                                meta.color,
+                              )}
+                            >
+                              {meta.label}
+                            </Badge>
+                          </div>
+                          <p className="num mt-0.5 text-[11px] text-muted-foreground">
+                            {formatDatePT(e.occurred_at)}
+                            {saldoApos && ` · saldo após R$ ${saldoApos}`}
+                          </p>
+                        </div>
+                        <p
+                          className={cn(
+                            "num shrink-0 text-sm font-semibold tabular-nums",
+                            meta.sign === 1 ? "text-success" : "text-destructive",
+                          )}
+                        >
+                          {meta.sign === 1 ? "+" : "−"}
+                          {formatBRL(v)}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {totalPages > 1 && (
+                <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    Página {currentPage} de {totalPages}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8 rounded-full"
+                      disabled={currentPage <= 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8 rounded-full"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </section>
           </>
         )}
       </main>
     </>
+  );
+}
+
+function AnalysisItem({
+  icon: Icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: typeof Circle;
+  label: string;
+  value: string;
+  accent?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border/40 bg-muted/5 p-4">
+      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </div>
+      <p className={cn("num mt-2 text-lg font-semibold tracking-tight", accent ?? "text-foreground")}>
+        {value}
+      </p>
+    </div>
   );
 }
