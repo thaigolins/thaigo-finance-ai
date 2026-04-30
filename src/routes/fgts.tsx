@@ -398,6 +398,80 @@ function FgtsPage() {
     <>
       <AppHeader title="FGTS" subtitle="Saldo, contas e evolução por empregador" exportModule="FGTS" />
       <main className="flex-1 space-y-6 p-4 md:p-8">
+        {/* Barra discreta — upload + cadastro manual */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Upload className="h-3.5 w-3.5" />
+            <span>Atualizar via extrato:</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 rounded-full px-3 text-xs"
+              onClick={() => inputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                "Selecionar arquivo"
+              )}
+            </Button>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="application/pdf,image/*"
+              multiple
+              hidden
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+          </div>
+          <FormDialog<Form>
+            title="Nova conta FGTS"
+            description="Cadastre um vínculo empregatício"
+            trigger={
+              <Button size="sm" variant="ghost" className="h-7 text-xs">
+                <Plus className="mr-1 h-3 w-3" /> Cadastro manual
+              </Button>
+            }
+            schema={schema}
+            defaultValues={{
+              employer: "",
+              cnpj: "",
+              status: "ativa",
+              balance: 0,
+              monthly_deposit: 0,
+              jam_month: 0,
+              last_movement: new Date().toISOString().slice(0, 10),
+            }}
+            fields={[
+              { name: "employer", label: "Empregador", type: "text", placeholder: "Razão social" },
+              { name: "cnpj", label: "CNPJ", type: "text", placeholder: "00.000.000/0000-00" },
+              {
+                name: "status",
+                label: "Status",
+                type: "select",
+                options: [
+                  { value: "ativa", label: "Ativa" },
+                  { value: "inativa", label: "Inativa" },
+                ],
+              },
+              { name: "balance", label: "Saldo (R$)", type: "number", step: "0.01" },
+              { name: "monthly_deposit", label: "Depósito mensal (R$)", type: "number", step: "0.01" },
+              { name: "jam_month", label: "JAM do mês (R$)", type: "number", step: "0.01" },
+              { name: "last_movement", label: "Última movimentação", type: "date" },
+            ]}
+            onSubmit={async (v) => {
+              const payload: Record<string, unknown> = { ...v };
+              if (!payload.cnpj) payload.cnpj = null;
+              if (!payload.last_movement) payload.last_movement = null;
+              await insert.mutateAsync(payload);
+            }}
+          />
+        </div>
+
         {/* SEÇÃO 1 — Header com 3 cards principais */}
         <section className="grid gap-5 md:grid-cols-3">
           <HeroCard
@@ -441,78 +515,6 @@ function FgtsPage() {
             icon={CalendarClock}
             tone="muted"
           />
-        </section>
-
-        {/* SEÇÃO 3 — Upload + Cadastro */}
-        <section className="grid gap-5 lg:grid-cols-3">
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              handleFiles(e.dataTransfer.files);
-            }}
-            className={cn(
-              "lg:col-span-2 rounded-2xl border border-dashed p-6 transition-all",
-              dragOver ? "border-primary/60 bg-emerald-soft" : "border-border/50 bg-card",
-            )}
-          >
-            <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-primary/30 bg-emerald-soft">
-                {uploading ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                ) : (
-                  <Upload className="h-5 w-5 text-primary" strokeWidth={1.75} />
-                )}
-              </div>
-              <div className="flex-1">
-                <h3 className="text-base font-semibold tracking-tight">Enviar extrato do FGTS</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Aceita PDF e imagens do app FGTS / Caixa. Os arquivos ficam guardados com
-                  criptografia no bucket privado.
-                </p>
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <Button
-                    size="sm"
-                    className="rounded-full"
-                    disabled={uploading}
-                    onClick={() => inputRef.current?.click()}
-                  >
-                    <FileText className="mr-1.5 h-3.5 w-3.5" />
-                    Selecionar arquivos
-                  </Button>
-                  <input
-                    ref={inputRef}
-                    type="file"
-                    accept="application/pdf,image/*"
-                    multiple
-                    hidden
-                    onChange={(e) => handleFiles(e.target.files)}
-                  />
-                  <Badge
-                    variant="outline"
-                    className="rounded-full border-border/40 text-[10px] uppercase tracking-wider text-muted-foreground"
-                  >
-                    <Shield className="mr-1 h-3 w-3" /> Criptografado
-                  </Badge>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-border/40 bg-card p-5 shadow-card">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Cadastro Manual
-            </p>
-            <p className="mt-2 text-sm text-foreground/90">
-              Adicione uma conta FGTS por empregador.
-            </p>
-            <div className="mt-4">{newDialog}</div>
-          </div>
         </section>
 
         {isLoading ? (
