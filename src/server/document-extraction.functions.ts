@@ -460,87 +460,113 @@ export const extractDocument = createServerFn({ method: "POST" })
         console.error("[extractDocument] FGTS header error:", e);
       }
 
-      // Etapa 2: processa cada página do PDF separadamente via Gemini
+      // Etapa 2: Gemini retorna CSV simples (evita truncamento de JSON com 200+ linhas)
       let fgtsEntries: unknown[] = [];
 
-      try {
-        // Divide o PDF em chunks de páginas simulados via múltiplas chamadas
-        // Cada chamada pede uma faixa de lançamentos específica
-        const BATCH_PROMPTS = [
-          "Extraia APENAS os lançamentos da PRIMEIRA METADE do documento (primeiras páginas).",
-          "Extraia APENAS os lançamentos da SEGUNDA METADE do documento (últimas páginas).",
-        ];
+      const parseCSVtoEntries = (csv: string) => {
+        const result: unknown[] = [];
+        const lines = csv.split(/\r?\n/);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("data")) continue;
+          const parts = trimmed.split("|").map(p => p.trim());
+          if (parts.length < 3) continue;
+          const [dateStr, desc, amtStr] = parts;
+          if (!dateStr?.match(/^\d{4}-\d{2}-\d{2}$/)) continue;
+          const amount = Math.abs(parseFloat(
+            (amtStr ?? "0").replace(/[^\d,.-]/g, "").replace(",", ".")
+          ));
+          if (!isFinite(amount) || amount === 0) continue;
+          const descLower = (desc ?? "").toLowerCase();
+          let entry_type = "outro";
+          if (descLower.includes("115-deposito") || descLower.includes("deposito")) entry_type = "deposito";
+          else if (descLower.includes("jam") || descLower.includes("ac cred") || descLower.includes("ac aut") || descLower.includes("regularizacao") || descLower.includes("reposicao")) entry_type = "jam";
+          else if (descLower.includes("saque")) entry_type = "saque";
+          result.push({ occurred_at: dateStr, entry_type, amount, notes: (desc ?? "").slice(0, 200) });
+        }
+        return result;
+      };
 
-        for (const batchPrompt of BATCH_PROMPTS) {
-          try {
-            const batchRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                model: "google/gemini-2.5-pro",
-                messages: [
-                  {
-                    role: "system",
-                    content: "Você é um especialista em extratos FGTS. Extraia lançamentos com precisão absoluta.",
-                  },
-                  {
-                    role: "user",
-                    content: [
-                      {
-                        type: "text",
-                        text: `${batchPrompt}
+      const csvPrompt = `Transcreva TODOS os lançamentos deste extrato FGTS em formato CSV simples.
+Uma linha por lançamento, usando pipe como separador: YYYY-MM-DD|DESCRICAO|VALOR
 
-Retorne APENAS este JSON sem markdown:
-{"entries": [{"occurred_at": "YYYY-MM-DD", "entry_type": "deposito|jam|saque|outro", "amount": 0.00, "notes": "descrição"}]}
+Exemplo:
+2019-01-07|115-DEPOSITO DEZEMBRO 2018|10829.95
+2019-02-10|CREDITO DE JAM 0,002466|26.70
+2019-04-02|SAQUE DEP COD 99|12090.15
 
 Regras:
-- entry_type: "deposito" para 115-DEPOSITO, "jam" para CREDITO DE JAM/AC CRED/AC AUT/REGULARIZACAO/AC REPOSICAO, "saque" para SAQUE DEP/SAQUE JAM
-- amount: valor POSITIVO da coluna VALOR
-- notes: texto da coluna LANÇAMENTO
-- Ignore SALDO ANTERIOR e cabeçalhos
-- Inclua TODOS os lançamentos visíveis nessa metade`,
-                      },
-                      {
-                        type: "image_url",
-                        image_url: { url: `data:${data.mime};base64,${base64}` },
-                      },
-                    ],
-                  },
-                ],
-                temperature: 0.1,
-                max_tokens: 8000,
-              }),
-            });
-            if (batchRes.ok) {
-              const bj = await batchRes.json() as { choices?: { message?: { content?: string } }[] };
-              const bc = bj.choices?.[0]?.message?.content ?? "";
-              console.log("[extractDocument] FGTS batch raw:", bc.slice(0, 200));
-              const bp = (safeParseJson(bc) as Record<string, unknown>) ?? {};
-              const arr = (bp as { entries?: unknown }).entries;
-              if (Array.isArray(arr)) {
-                fgtsEntries = [...fgtsEntries, ...arr];
-              }
-            }
-          } catch (e) {
-            console.error("[extractDocument] FGTS batch error:", e);
+- YYYY-MM-DD: data da coluna DATA
+- DESCRICAO: texto da coluna LANÇAMENTO
+- VALOR: número positivo da coluna VALOR (sem R$, sem negativos)
+- Inclua ABSOLUTAMENTE TODOS os lançamentos do primeiro ao último
+- Não inclua cabeçalhos, SALDO ANTERIOR ou linhas em branco
+- Retorne APENAS o CSV, sem markdown, sem texto adicional`;
+
+      try {
+        const [r1, r2] = await Promise.all([
+          fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-pro",
+              messages: [
+                { role: "system", content: "Você é um OCR especializado em extratos FGTS. Transcreva a tabela exatamente como CSV." },
+                { role: "user", content: [
+                  { type: "text", text: csvPrompt + "\n\nExtraia os lançamentos da PRIMEIRA METADE do documento (páginas 1 a 4)." },
+                  { type: "image_url", image_url: { url: `data:${data.mime};base64,${base64}` } },
+                ]},
+              ],
+              temperature: 0,
+              max_tokens: 8000,
+            }),
+          }),
+          fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-pro",
+              messages: [
+                { role: "system", content: "Você é um OCR especializado em extratos FGTS. Transcreva a tabela exatamente como CSV." },
+                { role: "user", content: [
+                  { type: "text", text: csvPrompt + "\n\nExtraia os lançamentos da SEGUNDA METADE do documento (páginas 5 a 8)." },
+                  { type: "image_url", image_url: { url: `data:${data.mime};base64,${base64}` } },
+                ]},
+              ],
+              temperature: 0,
+              max_tokens: 8000,
+            }),
+          }),
+        ]);
+
+        const texts: string[] = [];
+        for (const r of [r1, r2]) {
+          if (r.ok) {
+            const j = await r.json() as { choices?: { message?: { content?: string } }[] };
+            const t = j.choices?.[0]?.message?.content ?? "";
+            console.log("[extractDocument] FGTS CSV chunk len:", t.length, "preview:", t.slice(0, 200));
+            texts.push(t);
+          }
+        }
+        const allCSV = texts.join("\n");
+        const parsed = parseCSVtoEntries(allCSV);
+
+        // Dedup por data+valor+descrição
+        const seen = new Set<string>();
+        for (const e of parsed) {
+          const eo = e as Record<string, unknown>;
+          const key = `${eo.occurred_at}|${eo.amount}|${eo.notes}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            fgtsEntries.push(e);
           }
         }
 
-        // Remove duplicatas por occurred_at + amount + notes
-        const seen = new Set<string>();
-        fgtsEntries = fgtsEntries.filter((e: any) => {
-          const key = `${e.occurred_at}_${e.amount}_${e.notes}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-
-        console.log("[extractDocument] FGTS total entries after dedup:", fgtsEntries.length);
+        console.log("[extractDocument] FGTS FINAL entries:", fgtsEntries.length);
       } catch (e) {
-        console.error("[extractDocument] FGTS entries error:", e);
+        console.error("[extractDocument] FGTS CSV error:", e);
       }
 
-      console.log("[extractDocument] FGTS FINAL entries:", fgtsEntries.length);
       payload = { ...headerParsed, kind: "fgts", entries: fgtsEntries };
     } else {
       const messages = buildExtractionMessages(data.kind, base64, data.mime, data.filename);
