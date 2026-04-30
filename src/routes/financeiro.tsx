@@ -59,16 +59,6 @@ const accountTypeLabels: Record<BankAccount["account_type"], string> = {
   other: "Outros",
 };
 
-const accountSchema = z.object({
-  bank: z.string().min(1, "Banco obrigatório"),
-  account_type: z.enum(["checking", "savings", "investment", "wallet", "other"]),
-  branch: z.string().optional(),
-  account_number: z.string().optional(),
-  balance: z.number({ invalid_type_error: "Saldo inválido" }),
-  color: z.string().optional(),
-});
-type AccountForm = z.infer<typeof accountSchema>;
-
 const txSchema = z.object({
   description: z.string().min(1, "Descrição obrigatória"),
   amount: z.number({ invalid_type_error: "Valor inválido" }),
