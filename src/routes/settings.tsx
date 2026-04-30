@@ -23,7 +23,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { FormDialog, type FieldDef } from "@/components/form-dialog";
+import { FormDialog } from "@/components/form-dialog";
+import { BankPickerDialog } from "@/components/bank-picker-dialog";
+import { BankLogo } from "@/components/bank-logo";
+import { findBank } from "@/lib/banks";
 import {
   Select,
   SelectContent,
@@ -68,6 +71,8 @@ type BankAccount = {
   account_number: string | null;
   balance: number;
   color: string | null;
+  bank_color: string | null;
+  bank_logo: string | null;
 };
 
 const accountTypeLabels: Record<BankAccount["account_type"], string> = {
