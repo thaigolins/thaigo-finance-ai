@@ -314,19 +314,6 @@ function AccountsSection() {
   const updateAccount = useUserUpdate<Record<string, unknown>>("bank_accounts");
   const removeAccount = useUserDelete("bank_accounts");
 
-  const fields: FieldDef[] = [
-    { name: "bank", label: "Banco", type: "text", placeholder: "Itaú, Nubank, etc." },
-    {
-      name: "account_type",
-      label: "Tipo",
-      type: "select",
-      options: Object.entries(accountTypeLabels).map(([value, label]) => ({ value, label })),
-    },
-    { name: "branch", label: "Agência", type: "text", placeholder: "0001" },
-    { name: "account_number", label: "Conta", type: "text", placeholder: "12345-6" },
-    { name: "balance", label: "Saldo atual", type: "number", step: "0.01" },
-  ];
-
   return (
     <section className="rounded-2xl border border-border/40 bg-card/30 p-6">
       <header className="mb-5 flex items-center justify-between gap-3">
@@ -342,26 +329,14 @@ function AccountsSection() {
             </p>
           </div>
         </div>
-        <FormDialog<AccountForm>
+        <BankPickerDialog
           trigger={
             <Button size="sm" className="rounded-full">
               <Plus className="h-4 w-4" /> Nova conta
             </Button>
           }
-          title="Nova conta bancária"
-          description="Cadastre uma conta que será usada nas movimentações."
-          schema={accountSchema}
-          fields={fields}
-          defaultValues={{
-            bank: "",
-            account_type: "checking",
-            branch: "",
-            account_number: "",
-            balance: 0,
-            color: "",
-          }}
           onSubmit={async (values) => {
-            await insertAccount.mutateAsync(values as Record<string, unknown>);
+            await insertAccount.mutateAsync(values as unknown as Record<string, unknown>);
           }}
         />
       </header>
@@ -374,75 +349,85 @@ function AccountsSection() {
         <p className="text-sm text-muted-foreground">Nenhuma conta cadastrada ainda.</p>
       ) : (
         <ul className="grid gap-3">
-          {accounts.map((acc) => (
-            <li
-              key={acc.id}
-              className="flex items-center justify-between gap-3 rounded-xl border border-border/40 bg-background/40 p-4"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-sm font-semibold">{acc.bank}</p>
-                  <Badge variant="outline" className="text-[10px]">
-                    {accountTypeLabels[acc.account_type]}
-                  </Badge>
+          {accounts.map((acc) => {
+            const bankDef = findBank(acc.bank);
+            const color = acc.bank_color ?? bankDef?.color ?? acc.color ?? "#6B7280";
+            const logo = acc.bank_logo ?? bankDef?.logo ?? null;
+            return (
+              <li
+                key={acc.id}
+                style={{
+                  borderLeft: `4px solid ${color}`,
+                  background: `linear-gradient(90deg, ${color}0D 0%, transparent 60%)`,
+                }}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border/40 p-4"
+              >
+                <BankLogo name={acc.bank} logo={logo} color={color} size={40} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-semibold">{acc.bank}</p>
+                    <Badge variant="outline" className="text-[10px]">
+                      {accountTypeLabels[acc.account_type]}
+                    </Badge>
+                  </div>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {[acc.branch && `Ag. ${acc.branch}`, acc.account_number && `Cc. ${acc.account_number}`]
+                      .filter(Boolean)
+                      .join(" · ") || "Sem agência/conta"}
+                  </p>
                 </div>
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {[acc.branch && `Ag. ${acc.branch}`, acc.account_number && `Cc. ${acc.account_number}`]
-                    .filter(Boolean)
-                    .join(" · ") || "Sem agência/conta"}
-                </p>
-              </div>
-              <div className="text-right">
-                <p
-                  className={`text-sm font-semibold ${
-                    Number(acc.balance) >= 0 ? "text-foreground" : "text-destructive"
-                  }`}
-                >
-                  {formatBRL(Number(acc.balance))}
-                </p>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Saldo</p>
-              </div>
-              <div className="flex items-center gap-1">
-                <FormDialog<AccountForm>
-                  trigger={
-                    <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Editar">
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                  }
-                  title={`Editar ${acc.bank}`}
-                  schema={accountSchema}
-                  fields={fields}
-                  defaultValues={{
-                    bank: acc.bank,
-                    account_type: acc.account_type,
-                    branch: acc.branch ?? "",
-                    account_number: acc.account_number ?? "",
-                    balance: Number(acc.balance),
-                    color: acc.color ?? "",
-                  }}
-                  onSubmit={async (values) => {
-                    await updateAccount.mutateAsync({
-                      id: acc.id,
-                      values: values as Record<string, unknown>,
-                    });
-                  }}
-                />
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                  onClick={async () => {
-                    if (!confirm(`Remover a conta ${acc.bank}?`)) return;
-                    await removeAccount.mutateAsync(acc.id);
-                    toast.success("Conta removida");
-                  }}
-                  aria-label="Remover"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </li>
-          ))}
+                <div className="text-right">
+                  <p
+                    className={`text-sm font-semibold ${
+                      Number(acc.balance) >= 0 ? "text-foreground" : "text-destructive"
+                    }`}
+                  >
+                    {formatBRL(Number(acc.balance))}
+                  </p>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Saldo</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <BankPickerDialog
+                    trigger={
+                      <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Editar">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    }
+                    title={`Editar ${acc.bank}`}
+                    submitLabel="Salvar alterações"
+                    defaultValues={{
+                      bank: acc.bank,
+                      account_type: acc.account_type,
+                      branch: acc.branch ?? "",
+                      account_number: acc.account_number ?? "",
+                      balance: Number(acc.balance),
+                      bank_color: color,
+                      bank_logo: logo,
+                    }}
+                    onSubmit={async (values) => {
+                      await updateAccount.mutateAsync({
+                        id: acc.id,
+                        values: values as unknown as Record<string, unknown>,
+                      });
+                    }}
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                    onClick={async () => {
+                      if (!confirm(`Remover a conta ${acc.bank}?`)) return;
+                      await removeAccount.mutateAsync(acc.id);
+                      toast.success("Conta removida");
+                    }}
+                    aria-label="Remover"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
