@@ -766,17 +766,41 @@ function ChatPage() {
       if (replyContent) {
         await persistMessage(convId, "assistant", replyContent, []);
 
-        // Renomeia a conversa com base no assunto após primeira mensagem
+        // Renomeia conversa com título inteligente gerado pela IA
         const currentConv = conversations.find((c) => c.id === convId);
-        if (currentConv?.title === "Nova conversa" && text.trim().length > 3) {
-          const words = text.trim().split(/\s+/);
-          const shortTitle =
-            words.slice(0, 5).join(" ") + (words.length > 5 ? "..." : "");
-          await supabase
-            .from("ai_conversations")
-            .update({ title: shortTitle })
-            .eq("id", convId);
-          invalidateConvs();
+        if (currentConv?.title === "Nova conversa" && replyContent) {
+          try {
+            const { data: sessData } = await supabase.auth.getSession();
+            const accessToken = sessData.session?.access_token ?? "";
+            const titleResult = await aiChat({
+              data: {
+                conversationId: convId,
+                userMessage: `Gere um título curto (máximo 4 palavras, sem pontuação final) que resuma este assunto: "${text.slice(0, 150)}"`,
+                history: [],
+                attachments: [],
+                token: accessToken,
+              },
+            });
+            const generatedTitle = titleResult.reply
+              ?.trim()
+              .replace(/["“”'']/g, "")
+              .replace(/\.$/, "")
+              .slice(0, 50);
+            if (generatedTitle && generatedTitle.length > 2) {
+              await supabase
+                .from("ai_conversations")
+                .update({ title: generatedTitle })
+                .eq("id", convId);
+              invalidateConvs();
+            }
+          } catch {
+            const fallback = text.trim().split(" ").slice(0, 4).join(" ");
+            await supabase
+              .from("ai_conversations")
+              .update({ title: fallback })
+              .eq("id", convId);
+            invalidateConvs();
+          }
         }
       }
       await invalidateMessages();
