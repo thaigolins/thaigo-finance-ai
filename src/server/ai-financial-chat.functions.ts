@@ -22,6 +22,7 @@ const InputSchema = z.object({
   history: z.array(MessageSchema).max(30).default([]),
   // Anexos enviados nesta mensagem
   attachments: z.array(AttachmentSchema).max(10).default([]),
+  token: z.string().min(1),
 });
 
 type FinancialSnapshot = {
