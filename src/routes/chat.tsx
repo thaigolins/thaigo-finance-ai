@@ -225,18 +225,23 @@ function detectExtractorKind(
   attKind?: string,
 ): "fatura" | "extrato" | "fgts" | "emprestimo" | "contracheque" | null {
   const t = text.toLowerCase();
-  // Mapeamento direto pelo kind do anexo (quando não é "imagem"/"other")
+
+  // FGTS — prioridade máxima
+  if (/fgts|fundo\s+de\s+garantia/.test(t)) return "fgts";
+
+  // Pelo kind do anexo
   if (attKind === "fatura") return "fatura";
   if (attKind === "extrato") return "extrato";
   if (attKind === "fgts") return "fgts";
   if (attKind === "contrato") return "emprestimo";
   if (attKind === "contracheque") return "contracheque";
-  // Inferência por texto (útil quando o anexo é imagem)
-  if (/(fgts)/.test(t)) return "fgts";
+
+  // Por texto
   if (/(contracheque|holerite|sal[áa]rio)/.test(t)) return "contracheque";
-  if (/(empr[ée]stimo|d[ií]vida|financiamento|consignado|contrato)/.test(t)) return "emprestimo";
+  if (/(empr[ée]stimo|d[ií]vida|financiamento|consignado)/.test(t)) return "emprestimo";
   if (/(fatura|cart[ãa]o)/.test(t)) return "fatura";
-  if (/(extrato|banc[áa]rio|pix|conta corrente|lan[çc]amento banc)/.test(t)) return "extrato";
+  if (/(extrato|banc[áa]rio|pix|conta corrente)/.test(t)) return "extrato";
+
   return null;
 }
 
