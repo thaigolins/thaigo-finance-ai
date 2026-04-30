@@ -460,53 +460,87 @@ export const extractDocument = createServerFn({ method: "POST" })
         console.error("[extractDocument] FGTS header error:", e);
       }
 
-      // Etapa 2: entries via Lovable AI Gateway (Gemini Pro) em 2 chamadas (primeira + segunda metade)
-      // Dividir em batches evita truncamento de resposta para extratos com 200+ lançamentos.
-      const fetchHalf = async (half: "first" | "second"): Promise<unknown[]> => {
-        try {
-          const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-pro",
-              messages: buildEntriesMessages(base64, data.mime, data.filename, half),
-              temperature: 0.1,
-              max_tokens: 16000,
-            }),
-          });
-          if (!res.ok) {
-            const t = await res.text();
-            console.error(`[extractDocument] FGTS entries ${half} error:`, res.status, t.slice(0, 200));
-            return [];
+      // Etapa 2: processa cada página do PDF separadamente via Gemini
+      let fgtsEntries: unknown[] = [];
+
+      try {
+        // Divide o PDF em chunks de páginas simulados via múltiplas chamadas
+        // Cada chamada pede uma faixa de lançamentos específica
+        const BATCH_PROMPTS = [
+          "Extraia APENAS os lançamentos da PRIMEIRA METADE do documento (primeiras páginas).",
+          "Extraia APENAS os lançamentos da SEGUNDA METADE do documento (últimas páginas).",
+        ];
+
+        for (const batchPrompt of BATCH_PROMPTS) {
+          try {
+            const batchRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "google/gemini-2.5-pro",
+                messages: [
+                  {
+                    role: "system",
+                    content: "Você é um especialista em extratos FGTS. Extraia lançamentos com precisão absoluta.",
+                  },
+                  {
+                    role: "user",
+                    content: [
+                      {
+                        type: "text",
+                        text: `${batchPrompt}
+
+Retorne APENAS este JSON sem markdown:
+{"entries": [{"occurred_at": "YYYY-MM-DD", "entry_type": "deposito|jam|saque|outro", "amount": 0.00, "notes": "descrição"}]}
+
+Regras:
+- entry_type: "deposito" para 115-DEPOSITO, "jam" para CREDITO DE JAM/AC CRED/AC AUT/REGULARIZACAO/AC REPOSICAO, "saque" para SAQUE DEP/SAQUE JAM
+- amount: valor POSITIVO da coluna VALOR
+- notes: texto da coluna LANÇAMENTO
+- Ignore SALDO ANTERIOR e cabeçalhos
+- Inclua TODOS os lançamentos visíveis nessa metade`,
+                      },
+                      {
+                        type: "image_url",
+                        image_url: { url: `data:${data.mime};base64,${base64}` },
+                      },
+                    ],
+                  },
+                ],
+                temperature: 0.1,
+                max_tokens: 8000,
+              }),
+            });
+            if (batchRes.ok) {
+              const bj = await batchRes.json() as { choices?: { message?: { content?: string } }[] };
+              const bc = bj.choices?.[0]?.message?.content ?? "";
+              console.log("[extractDocument] FGTS batch raw:", bc.slice(0, 200));
+              const bp = (safeParseJson(bc) as Record<string, unknown>) ?? {};
+              const arr = (bp as { entries?: unknown }).entries;
+              if (Array.isArray(arr)) {
+                fgtsEntries = [...fgtsEntries, ...arr];
+              }
+            }
+          } catch (e) {
+            console.error("[extractDocument] FGTS batch error:", e);
           }
-          const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-          const c = j.choices?.[0]?.message?.content ?? "";
-          console.log(`[extractDocument] FGTS entries ${half} raw len:`, c.length);
-          const p = (safeParseJson(c) as Record<string, unknown>) ?? {};
-          const arr = (p as { entries?: unknown }).entries;
-          const entries = Array.isArray(arr) ? arr : [];
-          console.log(`[extractDocument] FGTS entries ${half} count:`, entries.length);
-          return entries;
-        } catch (e) {
-          console.error(`[extractDocument] FGTS entries ${half} threw:`, e);
-          return [];
         }
-      };
 
-      const [firstHalf, secondHalf] = await Promise.all([fetchHalf("first"), fetchHalf("second")]);
+        // Remove duplicatas por occurred_at + amount + notes
+        const seen = new Set<string>();
+        fgtsEntries = fgtsEntries.filter((e: any) => {
+          const key = `${e.occurred_at}_${e.amount}_${e.notes}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
 
-      // Merge + dedup por (occurred_at + notes + amount)
-      const seen = new Set<string>();
-      const fgtsEntries: unknown[] = [];
-      for (const e of [...firstHalf, ...secondHalf]) {
-        const eo = (e ?? {}) as Record<string, unknown>;
-        const key = `${String(eo.occurred_at ?? "")}|${String(eo.notes ?? "")}|${String(eo.amount ?? "")}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        fgtsEntries.push(e);
+        console.log("[extractDocument] FGTS total entries after dedup:", fgtsEntries.length);
+      } catch (e) {
+        console.error("[extractDocument] FGTS entries error:", e);
       }
 
-      console.log("[extractDocument] FGTS FINAL entries:", fgtsEntries.length, `(first=${firstHalf.length}, second=${secondHalf.length})`);
+      console.log("[extractDocument] FGTS FINAL entries:", fgtsEntries.length);
       payload = { ...headerParsed, kind: "fgts", entries: fgtsEntries };
     } else {
       const messages = buildExtractionMessages(data.kind, base64, data.mime, data.filename);
