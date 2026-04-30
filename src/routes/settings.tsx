@@ -309,20 +309,17 @@ function AccountsSection() {
   const updateAccount = useUserUpdate<Record<string, unknown>>("bank_accounts");
   const removeAccount = useUserDelete("bank_accounts");
 
-  const [editing, setEditing] = useState<BankAccount | null>(null);
-  const [open, setOpen] = useState(false);
-
-  const fields = [
-    { name: "bank" as const, label: "Banco", placeholder: "Itaú, Nubank, etc." },
+  const fields: FieldDef[] = [
+    { name: "bank", label: "Banco", type: "text", placeholder: "Itaú, Nubank, etc." },
     {
-      name: "account_type" as const,
+      name: "account_type",
       label: "Tipo",
-      type: "select" as const,
+      type: "select",
       options: Object.entries(accountTypeLabels).map(([value, label]) => ({ value, label })),
     },
-    { name: "branch" as const, label: "Agência", placeholder: "0001" },
-    { name: "account_number" as const, label: "Conta", placeholder: "12345-6" },
-    { name: "balance" as const, label: "Saldo atual", type: "number" as const, step: "0.01" },
+    { name: "branch", label: "Agência", type: "text", placeholder: "0001" },
+    { name: "account_number", label: "Conta", type: "text", placeholder: "12345-6" },
+    { name: "balance", label: "Saldo atual", type: "number", step: "0.01" },
   ];
 
   return (
