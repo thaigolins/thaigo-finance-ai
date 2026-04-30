@@ -136,40 +136,7 @@ function detectExport(text: string): { kind: PdfKind; module: string; period: st
   return { kind, module, period, filters };
 }
 
-function smartReply(text: string, attachments: AttachmentMeta[]): string {
-  const t = text.toLowerCase();
-  const att = attachments[0];
-
-  if (att) {
-    if (att.kind === "fatura") {
-      return `Recebi sua **fatura** (\`${att.filename}\`) e arquivei no bucket privado. Em breve vou extrair lançamentos automaticamente, classificar por categoria e vincular ao cartão correspondente.\n\n_Por enquanto, abra o módulo **Faturas** para revisar e ajustar manualmente._`;
-    }
-    if (att.kind === "extrato") {
-      return `Recebi seu **extrato bancário** (\`${att.filename}\`). Está armazenado com criptografia. Posso identificar Pix, transferências e débitos quando a leitura por IA estiver ativa.`;
-    }
-    if (att.kind === "fgts") {
-      return `Recebi o **extrato do FGTS** (\`${att.filename}\`). Identifiquei: empregador **Tech Holding S.A.**, conta **ativa**, saldo aproximado **R$ 48.230,50**, depósito mensal **R$ 1.480,00**, JAM **R$ 312,40**.\n\nDeseja que eu **atualize sua conta FGTS** com esses dados? Responda **\"confirmar\"** para gravar ou **\"ajustar\"** para revisar antes.`;
-    }
-    if (att.kind === "contrato") {
-      return `Recebi o **contrato/extrato de empréstimo** (\`${att.filename}\`). Identifiquei preliminarmente: **Itaú · Financiamento Imóvel**, saldo **R$ 312.400,00**, taxa **9,8% a.a.**, CET **10,6%**, **288 parcelas** de **R$ 3.850,40** (vencimento dia 10).\n\nResponda **\"confirmar\"** para registrar em Empréstimos & Dívidas ou **\"ajustar\"** para revisar.`;
-    }
-    if (att.kind === "contracheque") {
-      return `Recebi o **contracheque** (\`${att.filename}\`). Vou extrair empregador, salário bruto, líquido, INSS, IRRF e FGTS quando o processamento por IA for ativado.`;
-    }
-    if (att.kind === "imagem") {
-      return `Recebi sua imagem **${att.filename}**. Posso extrair os dados — me diga o que ela contém: **extrato**, **fatura**, **FGTS**, **dívida/empréstimo** ou **contracheque**? Ex.: _"faça lançamentos desse anexo (extrato)"_.`;
-    }
-    return `Arquivo \`${att.filename}\` anexado e arquivado com segurança.`;
-  }
-
-  if (t.includes("empréstimo") || t.includes("emprestimo") || t.includes("dívida") || t.includes("divida")) {
-    return "Recebi sua mensagem sobre empréstimo. Quando você anexar o extrato, identifico instituição, taxa, CET, parcelas e cadastro automaticamente em **Empréstimos & Dívidas**.";
-  }
-  if (t.includes("fgts")) {
-    return "Posso atualizar suas contas FGTS automaticamente. Anexe o extrato do app FGTS / Caixa que identifico empregador, saldo, depósitos e JAM.";
-  }
-  return "Analisando sua posição consolidada: posso comentar gastos, sugerir realocações de portfólio e gerar relatórios. Anexe extratos, faturas ou contracheques quando precisar que eu atualize seus dados.";
-}
+// smartReply removida — todas as respostas conversacionais agora vão pela IA real (aiChat).
 
 // Override: o texto do usuário tem prioridade máxima sobre o nome do arquivo
 function overrideKindByUserText(text: string): string | null {
@@ -737,46 +704,46 @@ function ChatPage() {
             ? "Private (executivo, com capa, índice e insights)"
             : "Simples (operacional, direto ao ponto)";
         replyContent = `Perfeito. Estou gerando seu **PDF ${exportReq.kind === "private" ? "Private" : "Simples"}** do módulo **${exportReq.module}** para **${exportReq.period}**${exportReq.filters.length ? ` com filtros: ${exportReq.filters.join(", ")}` : ""}.\n\nFormato: ${tipo}.\n\nO download começará em instantes.`;
-      } else if (text && !anyExtracted) {
-        // Só chama a IA conversacional se houve texto E não houve extração
-        try {
-          const history = messages
-            .slice(-20)
-            .filter((m) => m.role === "user" || m.role === "assistant")
-            .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
-          console.log("[chat] calling aiChat with:", {
-            conversationId: convId,
-            userMessage: userText.slice(0, 50),
-            historyLength: history.length,
-            attachments: attachments.length,
-          });
-          const result = await aiChat({
-            data: {
+      } else {
+        // Só chama a IA conversacional se:
+        // 1. Há texto
+        // 2. Não houve extração neste turno
+        // 3. Não é uma exportação de PDF (já tratado acima)
+        const shouldCallAI = text.trim().length > 0 && !anyExtracted;
+
+        if (shouldCallAI) {
+          try {
+            const history = messages
+              .slice(-20)
+              .filter((m) => m.role === "user" || m.role === "assistant")
+              .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+            console.log("[chat] calling aiChat with:", {
               conversationId: convId,
-              userMessage: userText,
-              history,
-              attachments: attachments.map((a) => ({
-                filename: a.filename,
-                kind: a.kind,
-                mime: a.mime,
-                size: a.size,
-              })),
-            },
-          });
-          console.log("[chat] aiChat result:", result);
-          replyContent = result?.reply ?? "";
-          if (!replyContent) {
-            console.warn("[chat] aiChat returned empty reply", result);
-            replyContent = smartReply(text, attachments);
+              userMessage: userText.slice(0, 50),
+              historyLength: history.length,
+              attachments: attachments.length,
+            });
+            const result = await aiChat({
+              data: {
+                conversationId: convId,
+                userMessage: userText,
+                history,
+                attachments: attachments.map((a) => ({
+                  filename: a.filename,
+                  kind: a.kind,
+                  mime: a.mime,
+                  size: a.size,
+                })),
+              },
+            });
+            console.log("[chat] aiChat result:", result);
+            replyContent = result?.reply ?? "Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.";
+          } catch (err) {
+            console.error("[chat] aiChat error:", err);
+            toast.error(err instanceof Error ? err.message : "Falha ao consultar IA");
+            replyContent = "Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.";
           }
-        } catch (err) {
-          console.error("[chat] aiChat error:", err);
-          toast.error(err instanceof Error ? err.message : "Falha ao consultar IA");
-          replyContent = smartReply(text, attachments);
         }
-      } else if (!anyExtracted && attachments.length > 0) {
-        // Anexou imagem sem texto: dá um aviso amigável
-        replyContent = smartReply(text, attachments);
       }
 
       if (replyContent) {
