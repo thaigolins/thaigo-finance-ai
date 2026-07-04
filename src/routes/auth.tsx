@@ -66,11 +66,13 @@ function AuthPage() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
+    const dest = safeNext(next);
+    const returnUrl = window.location.origin + dest;
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: returnUrl,
         data: { full_name: fullName },
       },
     });
@@ -91,8 +93,9 @@ function AuthPage() {
 
   const handleOAuth = async (provider: "google" | "apple") => {
     setBusy(true);
+    const dest = safeNext(next);
     const result = await lovable.auth.signInWithOAuth(provider, {
-      redirect_uri: window.location.origin,
+      redirect_uri: window.location.origin + dest,
     });
     if (result.error) {
       setBusy(false);
