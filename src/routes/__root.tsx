@@ -88,11 +88,16 @@ function AuthGate() {
   useEffect(() => {
     if (loading) return;
     if (!session && !isAuthRoute) {
-      console.log("[guard] no session on protected route", pathname, "→ /auth");
-      navigate({ to: "/auth", replace: true });
+      const nextParam = pathname + (typeof window !== "undefined" ? window.location.search : "");
+      const safe = nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/";
+      console.log("[guard] no session on protected route", pathname, "→ /auth?next=", safe);
+      navigate({ to: "/auth", search: { next: safe }, replace: true });
     } else if (session && isAuthRoute) {
-      console.log("[guard] session active on /auth → /");
-      navigate({ to: "/", replace: true });
+      const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+      const next = params?.get("next");
+      const dest = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+      console.log("[guard] session active on /auth →", dest);
+      window.location.replace(dest);
     }
   }, [session, loading, isAuthRoute, pathname, navigate]);
 
