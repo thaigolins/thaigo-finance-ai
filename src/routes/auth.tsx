@@ -17,12 +17,23 @@ export const Route = createFileRoute("/auth")({
       { name: "description", content: "Acesse sua conta private no Thaigo Finance AI." },
     ],
   }),
+  validateSearch: (s: Record<string, unknown>) => ({
+    next: typeof s.next === "string" ? s.next : undefined,
+  }),
   component: AuthPage,
 });
+
+// Only allow same-origin relative paths as post-auth redirects.
+function safeNext(next: string | undefined): string {
+  if (!next) return "/";
+  if (!next.startsWith("/") || next.startsWith("//")) return "/";
+  return next;
+}
 
 function AuthPage() {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
+  const { next } = Route.useSearch();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -30,10 +41,11 @@ function AuthPage() {
 
   useEffect(() => {
     if (!loading && session) {
-      console.log("[auth-page] session detected → redirect /");
-      navigate({ to: "/", replace: true });
+      const dest = safeNext(next);
+      console.log("[auth-page] session detected → redirect", dest);
+      window.location.replace(dest);
     }
-  }, [session, loading, navigate]);
+  }, [session, loading, navigate, next]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,11 +66,13 @@ function AuthPage() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
+    const dest = safeNext(next);
+    const returnUrl = window.location.origin + dest;
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: returnUrl,
         data: { full_name: fullName },
       },
     });
@@ -79,8 +93,9 @@ function AuthPage() {
 
   const handleOAuth = async (provider: "google" | "apple") => {
     setBusy(true);
+    const dest = safeNext(next);
     const result = await lovable.auth.signInWithOAuth(provider, {
-      redirect_uri: window.location.origin,
+      redirect_uri: window.location.origin + dest,
     });
     if (result.error) {
       setBusy(false);

@@ -13,6 +13,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as RecorrentesRouteImport } from './routes/recorrentes'
 import { Route as MetasRouteImport } from './routes/metas'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as InvestimentosRouteImport } from './routes/investimentos'
 import { Route as FinanceiroRouteImport } from './routes/financeiro'
 import { Route as FgtsRouteImport } from './routes/fgts'
@@ -23,8 +24,12 @@ import { Route as ChatRouteImport } from './routes/chat'
 import { Route as CartoesRouteImport } from './routes/cartoes'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as ImportReviewIdRouteImport } from './routes/import.review.$id'
 import { Route as ApiImportExtratoRouteImport } from './routes/api/import.extrato'
+import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -44,6 +49,11 @@ const RecorrentesRoute = RecorrentesRouteImport.update({
 const MetasRoute = MetasRouteImport.update({
   id: '/metas',
   path: '/metas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InvestimentosRoute = InvestimentosRouteImport.update({
@@ -96,6 +106,18 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char91DotmcpChar93ListToolsRoute =
+  Char91DotmcpChar93ListToolsRouteImport.update({
+    id: '/.mcp/list-tools',
+    path: '/.mcp/list-tools',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ImportReviewIdRoute = ImportReviewIdRouteImport.update({
   id: '/import/review/$id',
   path: '/import/review/$id',
@@ -104,6 +126,17 @@ const ImportReviewIdRoute = ImportReviewIdRouteImport.update({
 const ApiImportExtratoRoute = ApiImportExtratoRouteImport.update({
   id: '/api/import/extrato',
   path: '/api/import/extrato',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Char91DotmcpChar93InvokeToolToolRoute =
+  Char91DotmcpChar93InvokeToolToolRouteImport.update({
+    id: '/.mcp/invoke-tool/$tool',
+    path: '/.mcp/invoke-tool/$tool',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -118,10 +151,15 @@ export interface FileRoutesByFullPath {
   '/fgts': typeof FgtsRoute
   '/financeiro': typeof FinanceiroRoute
   '/investimentos': typeof InvestimentosRoute
+  '/mcp': typeof McpRoute
   '/metas': typeof MetasRoute
   '/recorrentes': typeof RecorrentesRoute
   '/relatorios': typeof RelatoriosRoute
   '/settings': typeof SettingsRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/import/extrato': typeof ApiImportExtratoRoute
   '/import/review/$id': typeof ImportReviewIdRoute
 }
@@ -136,10 +174,15 @@ export interface FileRoutesByTo {
   '/fgts': typeof FgtsRoute
   '/financeiro': typeof FinanceiroRoute
   '/investimentos': typeof InvestimentosRoute
+  '/mcp': typeof McpRoute
   '/metas': typeof MetasRoute
   '/recorrentes': typeof RecorrentesRoute
   '/relatorios': typeof RelatoriosRoute
   '/settings': typeof SettingsRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/import/extrato': typeof ApiImportExtratoRoute
   '/import/review/$id': typeof ImportReviewIdRoute
 }
@@ -155,10 +198,15 @@ export interface FileRoutesById {
   '/fgts': typeof FgtsRoute
   '/financeiro': typeof FinanceiroRoute
   '/investimentos': typeof InvestimentosRoute
+  '/mcp': typeof McpRoute
   '/metas': typeof MetasRoute
   '/recorrentes': typeof RecorrentesRoute
   '/relatorios': typeof RelatoriosRoute
   '/settings': typeof SettingsRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/import/extrato': typeof ApiImportExtratoRoute
   '/import/review/$id': typeof ImportReviewIdRoute
 }
@@ -175,10 +223,15 @@ export interface FileRouteTypes {
     | '/fgts'
     | '/financeiro'
     | '/investimentos'
+    | '/mcp'
     | '/metas'
     | '/recorrentes'
     | '/relatorios'
     | '/settings'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
+    | '/.lovable/oauth/consent'
+    | '/.mcp/invoke-tool/$tool'
     | '/api/import/extrato'
     | '/import/review/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -193,10 +246,15 @@ export interface FileRouteTypes {
     | '/fgts'
     | '/financeiro'
     | '/investimentos'
+    | '/mcp'
     | '/metas'
     | '/recorrentes'
     | '/relatorios'
     | '/settings'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
+    | '/.lovable/oauth/consent'
+    | '/.mcp/invoke-tool/$tool'
     | '/api/import/extrato'
     | '/import/review/$id'
   id:
@@ -211,10 +269,15 @@ export interface FileRouteTypes {
     | '/fgts'
     | '/financeiro'
     | '/investimentos'
+    | '/mcp'
     | '/metas'
     | '/recorrentes'
     | '/relatorios'
     | '/settings'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
+    | '/.lovable/oauth/consent'
+    | '/.mcp/invoke-tool/$tool'
     | '/api/import/extrato'
     | '/import/review/$id'
   fileRoutesById: FileRoutesById
@@ -230,10 +293,15 @@ export interface RootRouteChildren {
   FgtsRoute: typeof FgtsRoute
   FinanceiroRoute: typeof FinanceiroRoute
   InvestimentosRoute: typeof InvestimentosRoute
+  McpRoute: typeof McpRoute
   MetasRoute: typeof MetasRoute
   RecorrentesRoute: typeof RecorrentesRoute
   RelatoriosRoute: typeof RelatoriosRoute
   SettingsRoute: typeof SettingsRoute
+  Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
+  Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
   ApiImportExtratoRoute: typeof ApiImportExtratoRoute
   ImportReviewIdRoute: typeof ImportReviewIdRoute
 }
@@ -266,6 +334,13 @@ declare module '@tanstack/react-router' {
       path: '/metas'
       fullPath: '/metas'
       preLoaderRoute: typeof MetasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/investimentos': {
@@ -338,6 +413,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/list-tools': {
+      id: '/.mcp/list-tools'
+      path: '/.mcp/list-tools'
+      fullPath: '/.mcp/list-tools'
+      preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/import/review/$id': {
       id: '/import/review/$id'
       path: '/import/review/$id'
@@ -350,6 +439,20 @@ declare module '@tanstack/react-router' {
       path: '/api/import/extrato'
       fullPath: '/api/import/extrato'
       preLoaderRoute: typeof ApiImportExtratoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/invoke-tool/$tool': {
+      id: '/.mcp/invoke-tool/$tool'
+      path: '/.mcp/invoke-tool/$tool'
+      fullPath: '/.mcp/invoke-tool/$tool'
+      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -366,13 +469,28 @@ const rootRouteChildren: RootRouteChildren = {
   FgtsRoute: FgtsRoute,
   FinanceiroRoute: FinanceiroRoute,
   InvestimentosRoute: InvestimentosRoute,
+  McpRoute: McpRoute,
   MetasRoute: MetasRoute,
   RecorrentesRoute: RecorrentesRoute,
   RelatoriosRoute: RelatoriosRoute,
   SettingsRoute: SettingsRoute,
+  Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
+  Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
   ApiImportExtratoRoute: ApiImportExtratoRoute,
   ImportReviewIdRoute: ImportReviewIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
