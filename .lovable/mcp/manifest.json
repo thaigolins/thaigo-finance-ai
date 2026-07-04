@@ -42,7 +42,6 @@
           "openWorldHint": false
         },
         "inputSchema": {
-          "$schema": "http://json-schema.org/draft-07/schema#",
           "type": "object",
           "properties": {
             "from": {
@@ -56,24 +55,26 @@
               "description": "End date, YYYY-MM-DD, inclusive."
             },
             "kind": {
-              "description": "Optional filter by transaction kind.",
               "type": "string",
               "enum": [
                 "income",
                 "expense"
-              ]
+              ],
+              "description": "Optional filter by transaction kind."
             },
             "limit": {
-              "default": 50,
               "type": "integer",
               "minimum": 1,
-              "maximum": 200
+              "maximum": 200,
+              "default": 50
             }
           },
           "required": [
             "from",
             "to"
-          ]
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
         },
         "outputSchema": null
       },
