@@ -39,7 +39,7 @@ import {
   updateStagingTx,
   confirmStaging,
   discardSession,
-} from "@/server/import-engine.functions";
+} from "@/lib/import-engine.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 async function getToken(): Promise<string> {
